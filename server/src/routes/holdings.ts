@@ -30,7 +30,9 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   res.json({ holdings })
 })
 
-// POST /api/holdings — add (or replace, by symbol) a holding.
+// POST /api/holdings — add a holding. If the ticker already exists, COMBINE:
+// the new quantity is added to the existing position (price/prev refreshed to
+// the incoming values) rather than overwriting it.
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const { symbol, name, category, quantity, price, prevClose } = req.body
   const sym = String(symbol || '').toUpperCase().trim()
@@ -40,27 +42,41 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 
   const p = Number(price) || 0
+  const pc = prevClose != null && !isNaN(Number(prevClose)) ? Number(prevClose) : p
+  const qty = Number(quantity) || 0
   const cat = normCategory(category)
-  const holding = await prisma.holding.upsert({
+
+  const existing = await prisma.holding.findUnique({
     where: { userId_symbol: { userId: req.userId!, symbol: sym } },
-    create: {
+  })
+
+  if (existing) {
+    const combined = await prisma.holding.update({
+      where: { id: existing.id },
+      data: {
+        quantity: existing.quantity + qty,
+        price: p,
+        prevClose: pc,
+        name: String(name || '').trim() || existing.name,
+        category: cat,
+      },
+    })
+    res.status(200).json({ holding: combined, combined: true, previousQuantity: existing.quantity })
+    return
+  }
+
+  const holding = await prisma.holding.create({
+    data: {
       userId: req.userId!,
       symbol: sym,
       name: String(name || '').trim() || sym,
       category: cat,
-      quantity: Number(quantity) || 0,
+      quantity: qty,
       price: p,
-      prevClose: prevClose != null && !isNaN(Number(prevClose)) ? Number(prevClose) : p,
-    },
-    update: {
-      name: String(name || '').trim() || sym,
-      category: cat,
-      quantity: Number(quantity) || 0,
-      price: p,
-      prevClose: prevClose != null && !isNaN(Number(prevClose)) ? Number(prevClose) : p,
+      prevClose: pc,
     },
   })
-  res.status(201).json({ holding })
+  res.status(201).json({ holding, combined: false })
 })
 
 // PUT /api/holdings/:id — update an existing holding.

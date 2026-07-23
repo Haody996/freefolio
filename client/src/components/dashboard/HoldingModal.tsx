@@ -54,17 +54,25 @@ const labelStyle: React.CSSProperties = {
 
 export default function HoldingModal({
   editing,
+  existing,
   onClose,
   onSave,
   onDelete,
 }: {
   editing: Holding | null // null = add mode
+  existing: Holding[]
   onClose: () => void
   onSave: (p: SavePayload) => void
   onDelete: (h: Holding) => void
 }) {
   const isEdit = !!editing
   const [draft, setDraft] = useState<Draft>(toDraft(editing))
+
+  // In add mode, warn when the ticker already exists — saving will combine quantities.
+  const dup = !isEdit
+    ? existing.find((h) => h.symbol === draft.symbol.toUpperCase().trim())
+    : undefined
+  const addQty = parseFloat(draft.quantity) || 0
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
 
@@ -265,6 +273,23 @@ export default function HoldingModal({
             </div>
           )}
 
+          {dup && (
+            <div
+              style={{
+                background: 'rgba(255,176,32,0.08)',
+                border: '1px solid rgba(255,176,32,0.3)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 12.5,
+                color: '#F2C879',
+                lineHeight: 1.45,
+              }}
+            >
+              You already hold <b>{dup.symbol}</b> ({dup.quantity} sh). Saving will{' '}
+              <b>combine</b> them into <b>{dup.quantity + addQty} sh</b> — the existing position won't be replaced.
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
             {isEdit && (
               <button
@@ -315,7 +340,7 @@ export default function HoldingModal({
                   cursor: 'pointer',
                 }}
               >
-                Save holding
+                {dup ? 'Combine holding' : 'Save holding'}
               </button>
             </div>
           </div>

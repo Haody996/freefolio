@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import { clearAuth } from '../lib/auth'
+import { useIsMobile } from '../lib/useIsMobile'
 import Spinner from '../components/ui/Spinner'
 import Sidebar from '../components/dashboard/Sidebar'
 import NetWorthPanel from '../components/dashboard/NetWorthPanel'
@@ -58,6 +59,7 @@ function greeting(): string {
 export default function Dashboard() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   const [privacy, setPrivacy] = useState(false)
   const [range, setRange] = useState<Range>('1Y')
@@ -221,10 +223,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0E0F13', color: '#F2F4F8', fontFamily: "'Manrope', system-ui, sans-serif" }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', minHeight: '100vh', background: '#0E0F13', color: '#F2F4F8', fontFamily: "'Manrope', system-ui, sans-serif" }}>
       <Sidebar netWorth={totals.total} onLogout={logout} />
 
-      <main style={{ flex: 1, minWidth: 0, padding: '30px 38px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '16px 14px' : '30px 38px', display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 20 }}>
         {/* Header */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div>
@@ -260,7 +262,7 @@ export default function Dashboard() {
         />
 
         {/* Allocation + Snapshot */}
-        <section style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 20 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '420px 1fr', gap: isMobile ? 16 : 20 }}>
           <div style={panel}>
             <div style={panelTitle}>Allocation</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -303,13 +305,15 @@ export default function Dashboard() {
         {/* Holdings */}
         <section style={panel}>
           <div style={panelTitle}>Holdings</div>
-          <div style={{ ...holdingsGrid, padding: '0 4px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', fontSize: 11, letterSpacing: 0.6, color: '#8A90A2', fontWeight: 700, textTransform: 'uppercase' }}>
-            <div>Asset</div>
-            <div style={{ textAlign: 'right' }}>Price</div>
-            <div style={{ textAlign: 'right' }}>24h</div>
-            <div style={{ textAlign: 'right' }}>Holdings</div>
-            <div style={{ textAlign: 'right' }}>Value / Alloc</div>
-          </div>
+          {!isMobile && (
+            <div style={{ ...holdingsGrid, padding: '0 4px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', fontSize: 11, letterSpacing: 0.6, color: '#8A90A2', fontWeight: 700, textTransform: 'uppercase' }}>
+              <div>Asset</div>
+              <div style={{ textAlign: 'right' }}>Price</div>
+              <div style={{ textAlign: 'right' }}>24h</div>
+              <div style={{ textAlign: 'right' }}>Holdings</div>
+              <div style={{ textAlign: 'right' }}>Value / Alloc</div>
+            </div>
+          )}
           {totals.en.length === 0 && (
             <div style={{ padding: '28px 4px', textAlign: 'center', color: '#8A90A2', fontSize: 13 }}>
               No holdings yet — hit “+ Add holding” to start.
@@ -317,6 +321,39 @@ export default function Dashboard() {
           )}
           {totals.en.map((h) => {
             const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : `${h.quantity} sh`
+            const badge = (
+              <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: catColor(h.category), color: '#04140C' }}>
+                {h.symbol.slice(0, 4)}
+              </span>
+            )
+
+            // Mobile: compact two-part row (asset left, value/24h right).
+            if (isMobile) {
+              return (
+                <div
+                  key={h.id}
+                  onClick={() => openEdit(h)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 4px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontVariantNumeric: 'tabular-nums', cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    {badge}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{h.symbol}</div>
+                      <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {fmtUSD(h.price, 2)} · {shares}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{mask(fmtUSD(h.value), privacy)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: h.dayPct >= 0 ? '#22E38A' : '#FF5470' }}>
+                      {signedPct(h.dayPct)} · {pct(h.alloc)}
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+
             return (
               <div
                 key={h.id}
@@ -325,9 +362,7 @@ export default function Dashboard() {
                 style={{ ...holdingsGrid, padding: '14px 8px', margin: '0 -4px', borderRadius: 10, borderBottom: '1px solid rgba(255,255,255,0.05)', alignItems: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'pointer' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: catColor(h.category), color: '#04140C' }}>
-                    {h.symbol.slice(0, 4)}
-                  </span>
+                  {badge}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{h.symbol}</div>
                     <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
@@ -353,7 +388,7 @@ export default function Dashboard() {
               <div style={{ fontSize: 13, color: '#8A90A2', marginTop: 3 }}>Twist the assumptions to see where you land.</div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '290px 1fr', gap: 28, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '290px 1fr', gap: isMobile ? 20 : 28, alignItems: 'start' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {controls.map((c) => (
                   <div key={c.field} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -425,6 +460,7 @@ export default function Dashboard() {
       {modalOpen && (
         <HoldingModal
           editing={editing}
+          existing={holdings}
           onClose={() => setModalOpen(false)}
           onSave={(p) => saveHolding.mutate(p)}
           onDelete={(h) => deleteHolding.mutate(h.id)}
