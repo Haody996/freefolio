@@ -5,46 +5,77 @@ export type AssetTypeLike = 'STOCK' | 'ETF' | 'CRYPTO' | 'MUTUAL_FUND' | 'OTHER'
 export interface Quote {
   symbol: string
   price: number
+  prevClose: number
   currency: string
 }
 
-const FINNHUB_KEY = process.env.FINNHUB_API_KEY
 const COINGECKO_BASE = process.env.COINGECKO_API_BASE || 'https://api.coingecko.com/api/v3'
+const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart'
+// Yahoo rejects requests without a browser-ish User-Agent.
+const YAHOO_HEADERS = { 'User-Agent': 'Mozilla/5.0' }
 
-// Finnhub covers US stocks/ETFs. Returns null if no key configured or symbol unknown.
+// Top crypto tickers → CoinGecko coin ids. Holdings store the ticker (e.g. BTC);
+// the provider translates it here. Unknown tickers fall back to the lowercased
+// symbol as the id (which works for many coins).
+export const CRYPTO_IDS: Record<string, string> = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  USDT: 'tether',
+  BNB: 'binancecoin',
+  SOL: 'solana',
+  XRP: 'ripple',
+  USDC: 'usd-coin',
+  ADA: 'cardano',
+  DOGE: 'dogecoin',
+  AVAX: 'avalanche-2',
+  TON: 'the-open-network',
+  TRX: 'tron',
+  LINK: 'chainlink',
+  DOT: 'polkadot',
+  MATIC: 'matic-network',
+}
+
+// Stocks/ETFs via Yahoo Finance's public chart endpoint (no API key). The `meta`
+// block carries the latest price and the previous close directly.
 async function fetchStockQuote(symbol: string): Promise<Quote | null> {
-  if (!FINNHUB_KEY) return null
   try {
-    const { data } = await axios.get('https://finnhub.io/api/v1/quote', {
-      params: { symbol: symbol.toUpperCase(), token: FINNHUB_KEY },
+    const { data } = await axios.get(`${YAHOO_BASE}/${encodeURIComponent(symbol.toUpperCase())}`, {
+      params: { range: '5d', interval: '1d' },
+      headers: YAHOO_HEADERS,
       timeout: 8000,
     })
-    // `c` is the current price; Finnhub returns 0 for unknown symbols.
-    if (typeof data?.c === 'number' && data.c > 0) {
-      return { symbol: symbol.toUpperCase(), price: data.c, currency: 'USD' }
+    const meta = data?.chart?.result?.[0]?.meta
+    const price = meta?.regularMarketPrice
+    if (typeof price === 'number' && price > 0) {
+      const prevClose = typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0 ? meta.chartPreviousClose : price
+      return { symbol: symbol.toUpperCase(), price, prevClose, currency: meta.currency || 'USD' }
     }
     return null
   } catch (err) {
-    console.error(`[prices] finnhub failed for ${symbol}:`, String(err))
+    console.error(`[prices] yahoo quote failed for ${symbol}:`, String(err))
     return null
   }
 }
 
-// CoinGecko's public API keys prices by their internal coin id (e.g. "bitcoin"),
-// so callers pass the coin id as the holding symbol for crypto.
-async function fetchCryptoQuote(coinId: string): Promise<Quote | null> {
+// CoinGecko keys prices by internal coin id; we translate the ticker via CRYPTO_IDS.
+// include_24hr_change lets us derive the previous close from the current price.
+async function fetchCryptoQuote(symbol: string): Promise<Quote | null> {
+  const id = CRYPTO_IDS[symbol.toUpperCase()] || symbol.toLowerCase()
   try {
     const { data } = await axios.get(`${COINGECKO_BASE}/simple/price`, {
-      params: { ids: coinId.toLowerCase(), vs_currencies: 'usd' },
+      params: { ids: id, vs_currencies: 'usd', include_24hr_change: 'true' },
       timeout: 8000,
     })
-    const price = data?.[coinId.toLowerCase()]?.usd
+    const row = data?.[id]
+    const price = row?.usd
     if (typeof price === 'number' && price > 0) {
-      return { symbol: coinId.toLowerCase(), price, currency: 'USD' }
+      const chg = typeof row.usd_24h_change === 'number' ? row.usd_24h_change : 0
+      const prevClose = chg !== 0 ? price / (1 + chg / 100) : price
+      return { symbol: symbol.toUpperCase(), price, prevClose, currency: 'USD' }
     }
     return null
   } catch (err) {
-    console.error(`[prices] coingecko failed for ${coinId}:`, String(err))
+    console.error(`[prices] coingecko failed for ${symbol} (${id}):`, String(err))
     return null
   }
 }
@@ -61,4 +92,61 @@ export async function getQuotes(
 ): Promise<Quote[]> {
   const results = await Promise.all(items.map((i) => getQuote(i.symbol, i.assetType)))
   return results.filter((q): q is Quote => q !== null)
+}
+
+// ─── Historical daily prices (for reconstructing net-worth history) ──
+
+export interface HistPoint {
+  date: string // YYYY-MM-DD
+  price: number
+}
+
+// Crypto history via CoinGecko market_chart (free, daily granularity up to ~365d).
+async function fetchCryptoHistory(symbol: string, days: number): Promise<HistPoint[]> {
+  const id = CRYPTO_IDS[symbol.toUpperCase()] || symbol.toLowerCase()
+  try {
+    const { data } = await axios.get(`${COINGECKO_BASE}/coins/${id}/market_chart`, {
+      params: { vs_currency: 'usd', days, interval: 'daily' },
+      timeout: 12000,
+    })
+    const prices: [number, number][] = data?.prices || []
+    return prices.map(([ts, price]) => ({ date: new Date(ts).toISOString().slice(0, 10), price }))
+  } catch (err) {
+    console.error(`[prices] coingecko history failed for ${symbol}:`, String(err))
+    return []
+  }
+}
+
+// Stock/ETF daily history via Yahoo Finance's chart endpoint (no key).
+async function fetchStockHistory(symbol: string, days: number): Promise<HistPoint[]> {
+  try {
+    const { data } = await axios.get(`${YAHOO_BASE}/${encodeURIComponent(symbol.toUpperCase())}`, {
+      params: { range: '1y', interval: '1d' },
+      headers: YAHOO_HEADERS,
+      timeout: 12000,
+    })
+    const result = data?.chart?.result?.[0]
+    const ts: number[] = result?.timestamp || []
+    const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || []
+    const out: HistPoint[] = []
+    for (let i = 0; i < ts.length; i++) {
+      const price = closes[i]
+      if (typeof price === 'number') {
+        out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), price })
+      }
+    }
+    return out.slice(-days)
+  } catch (err) {
+    console.error(`[prices] yahoo history failed for ${symbol}:`, String(err))
+    return []
+  }
+}
+
+export async function getHistory(
+  symbol: string,
+  assetType: AssetTypeLike,
+  days: number
+): Promise<HistPoint[]> {
+  if (assetType === 'CRYPTO') return fetchCryptoHistory(symbol, days)
+  return fetchStockHistory(symbol, days)
 }

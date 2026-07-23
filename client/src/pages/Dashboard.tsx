@@ -143,6 +143,24 @@ export default function Dashboard() {
     },
   })
 
+  // Reconstruct real net-worth history from market data (CoinGecko/Stooq).
+  const backfill = useMutation({
+    mutationFn: async () => (await api.post('/networth/backfill?days=365')).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['networth', 'history'] }),
+  })
+
+  // Auto-run once when the account has holdings but little real history, so the
+  // chart shows real data instead of the synthetic fallback.
+  const autoBackfilled = useRef(false)
+  const realPoints = historyQ.data?.history?.length ?? 0
+  useEffect(() => {
+    if (autoBackfilled.current) return
+    if (!holdingsQ.isLoading && !historyQ.isLoading && (holdingsQ.data?.holdings.length ?? 0) > 0 && realPoints < 30) {
+      autoBackfilled.current = true
+      backfill.mutate()
+    }
+  }, [holdingsQ.isLoading, historyQ.isLoading, holdingsQ.data, realPoints, backfill])
+
   if (holdingsQ.isLoading || settingsQ.isLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -237,6 +255,8 @@ export default function Dashboard() {
           privacy={privacy}
           range={range}
           onRange={setRange}
+          onSyncHistory={() => backfill.mutate()}
+          syncingHistory={backfill.isPending}
         />
 
         {/* Allocation + Snapshot */}

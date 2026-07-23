@@ -14,6 +14,8 @@ export default function NetWorthPanel({
   privacy,
   range,
   onRange,
+  onSyncHistory,
+  syncingHistory,
 }: {
   values: number[]
   dates: Date[]
@@ -23,6 +25,8 @@ export default function NetWorthPanel({
   privacy: boolean
   range: Range
   onRange: (r: Range) => void
+  onSyncHistory?: () => void
+  syncingHistory?: boolean
 }) {
   const cnt = Math.min(RANGE_COUNT[range], values.length)
   const v = values.slice(-cnt)
@@ -53,8 +57,30 @@ export default function NetWorthPanel({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 11 }}>
-          {RANGES.map((r) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {onSyncHistory && (
+            <button
+              onClick={onSyncHistory}
+              disabled={syncingHistory}
+              title="Rebuild history from real market data"
+              style={{
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.05)',
+                color: syncingHistory ? '#5B6172' : '#8A90A2',
+                borderRadius: 10,
+                padding: '7px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                cursor: syncingHistory ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {syncingHistory ? 'Syncing…' : '↻ Real history'}
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 11 }}>
+            {RANGES.map((r) => (
             <button
               key={r}
               onClick={() => onRange(r)}
@@ -72,7 +98,8 @@ export default function NetWorthPanel({
             >
               {r}
             </button>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
       <div style={{ marginTop: 10 }}>

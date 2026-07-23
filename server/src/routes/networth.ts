@@ -1,7 +1,7 @@
 import { Router, Response } from 'express'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
 import prisma from '../lib/prisma'
-import { computeNetWorth, snapshotNetWorth } from '../lib/networth'
+import { computeNetWorth, snapshotNetWorth, backfillHistory } from '../lib/networth'
 
 const router = Router()
 router.use(authMiddleware)
@@ -30,6 +30,14 @@ router.get('/history', async (req: AuthRequest, res: Response): Promise<void> =>
 router.post('/snapshot', async (req: AuthRequest, res: Response): Promise<void> => {
   const netWorth = await snapshotNetWorth(req.userId!)
   res.json({ netWorth })
+})
+
+// POST /api/networth/backfill?days=365 — reconstruct REAL history from market data.
+router.post('/backfill', async (req: AuthRequest, res: Response): Promise<void> => {
+  const days = Math.min(Number(req.query.days) || 365, 365)
+  const written = await backfillHistory(req.userId!, days)
+  await snapshotNetWorth(req.userId!) // ensure today reflects the live total
+  res.json({ written })
 })
 
 export default router

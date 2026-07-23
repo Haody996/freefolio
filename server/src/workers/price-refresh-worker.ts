@@ -31,7 +31,7 @@ async function refreshAllPrices(): Promise<number> {
     if (!quote) continue
     await prisma.holding.update({
       where: { id: h.id },
-      data: { prevClose: h.price || quote.price, price: quote.price },
+      data: { prevClose: quote.prevClose ?? h.price ?? quote.price, price: quote.price },
     })
     updated++
   }

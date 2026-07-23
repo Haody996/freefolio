@@ -120,10 +120,10 @@ router.post('/:id/refresh-price', async (req: AuthRequest, res: Response): Promi
     res.status(404).json({ error: 'No quote available' })
     return
   }
-  // Roll the current price into prevClose so the day change stays meaningful.
+  // Use the provider's real previous close when available.
   const updated = await prisma.holding.update({
     where: { id: holding.id },
-    data: { prevClose: holding.price || quote.price, price: quote.price },
+    data: { prevClose: quote.prevClose ?? holding.price ?? quote.price, price: quote.price },
   })
   res.json({ holding: updated })
 })

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CATEGORIES, CAT_LABEL, catColor } from '../../lib/portfolio'
+import api from '../../lib/api'
+import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO } from '../../lib/portfolio'
 import type { Category, Holding } from '../../lib/portfolio'
 
 export interface Draft {
@@ -64,9 +65,44 @@ export default function HoldingModal({
 }) {
   const isEdit = !!editing
   const [draft, setDraft] = useState<Draft>(toDraft(editing))
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
 
   function set<K extends keyof Draft>(field: K, value: Draft[K]) {
     setDraft((d) => ({ ...d, [field]: value }))
+  }
+
+  const isMarketPriced = draft.category !== 'CASH' && draft.category !== 'OTHER'
+
+  // When a ticker is typed/picked, set its name (for known crypto) and fetch a
+  // live quote to prefill price + previous close where those fields are empty.
+  function onTicker(value: string) {
+    const sym = value.toUpperCase()
+    setDraft((d) => {
+      const known = TOP_CRYPTO.find((c) => c.symbol === sym)
+      return { ...d, symbol: value, name: known && !d.name ? known.name : d.name }
+    })
+  }
+
+  async function syncQuote() {
+    const sym = draft.symbol.toUpperCase().trim()
+    if (!sym || !isMarketPriced) return
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const { data } = await api.get('/prices/quote', { params: { symbol: sym, category: draft.category } })
+      const q = data.quote as { price: number; prevClose: number }
+      setDraft((d) => ({
+        ...d,
+        price: d.price === '' ? String(q.price) : d.price,
+        prevClose: d.prevClose === '' ? String(q.prevClose ?? q.price) : d.prevClose,
+      }))
+      setSyncMsg(`Live: $${q.price.toLocaleString()} · prev close $${(q.prevClose ?? q.price).toLocaleString()}`)
+    } catch {
+      setSyncMsg('No live quote for that ticker — enter values manually.')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   function save() {
@@ -166,10 +202,21 @@ export default function HoldingModal({
               <label style={labelStyle}>Ticker</label>
               <input
                 value={draft.symbol}
-                onChange={(e) => set('symbol', e.target.value)}
-                placeholder="e.g. TSLA"
+                onChange={(e) => onTicker(e.target.value)}
+                onBlur={syncQuote}
+                list={draft.category === 'CRYPTO' ? 'ff-top-crypto' : undefined}
+                placeholder={draft.category === 'CRYPTO' ? 'e.g. BTC' : 'e.g. TSLA'}
                 style={{ ...inputStyle, fontWeight: 600, textTransform: 'uppercase' }}
               />
+              {draft.category === 'CRYPTO' && (
+                <datalist id="ff-top-crypto">
+                  {TOP_CRYPTO.map((c) => (
+                    <option key={c.symbol} value={c.symbol}>
+                      {c.name}
+                    </option>
+                  ))}
+                </datalist>
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={labelStyle}>Name</label>
@@ -191,9 +238,32 @@ export default function HoldingModal({
               <input value={draft.prevClose} onChange={(e) => set('prevClose', e.target.value)} type="number" step="any" placeholder="optional" style={inputStyle} />
             </div>
           </div>
-          <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
-            For cash or manual entries, set quantity to 1 and price to the total value.
-          </div>
+          {isMarketPriced ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: -4, minHeight: 18 }}>
+              <button
+                type="button"
+                onClick={syncQuote}
+                disabled={syncing || !draft.symbol.trim()}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: syncing || !draft.symbol.trim() ? '#5B6172' : '#22E38A',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: syncing || !draft.symbol.trim() ? 'default' : 'pointer',
+                  padding: 0,
+                }}
+              >
+                {syncing ? 'Fetching…' : '↻ Fetch live price'}
+              </button>
+              {syncMsg && <span style={{ fontSize: 12, color: '#8A90A2' }}>{syncMsg}</span>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
+              For cash or manual entries, set quantity to 1 and price to the total value.
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
             {isEdit && (

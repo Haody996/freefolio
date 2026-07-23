@@ -57,6 +57,21 @@ export function catColor(c: Category): string {
   return CAT_COLOR[c] || '#8A90A2'
 }
 
+// Top-10 crypto by market cap — offered as suggestions in the Add Holding modal.
+// The ticker is stored as the holding symbol; the server maps it to a CoinGecko id.
+export const TOP_CRYPTO: { symbol: string; name: string }[] = [
+  { symbol: 'BTC', name: 'Bitcoin' },
+  { symbol: 'ETH', name: 'Ethereum' },
+  { symbol: 'USDT', name: 'Tether' },
+  { symbol: 'BNB', name: 'BNB' },
+  { symbol: 'SOL', name: 'Solana' },
+  { symbol: 'XRP', name: 'XRP' },
+  { symbol: 'USDC', name: 'USD Coin' },
+  { symbol: 'ADA', name: 'Cardano' },
+  { symbol: 'DOGE', name: 'Dogecoin' },
+  { symbol: 'AVAX', name: 'Avalanche' },
+]
+
 // ─── Derived values ──────────────────────────────────────────────────
 
 export function computeTotals(holdings: Holding[]): Totals {
