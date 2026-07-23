@@ -14,7 +14,7 @@ export default function GoogleSignInButton({ onError }: { onError?: (msg: string
           const { data } = await api.post('/auth/google', { credential: cred.credential })
           setToken(data.token)
           setUser(data.user)
-          navigate('/dashboard')
+          navigate('/')
         } catch {
           onError?.('Google sign-in failed')
         }

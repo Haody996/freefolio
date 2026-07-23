@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Flame } from 'lucide-react'
 import api from '../lib/api'
 import { setToken, setUser } from '../lib/auth'
 import GoogleSignInButton from '../components/ui/GoogleSignInButton'
 import Spinner from '../components/ui/Spinner'
+import AuthShell from '../components/ui/AuthShell'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -21,7 +21,7 @@ export default function Login() {
       const { data } = await api.post('/auth/login', { email, password })
       setToken(data.token)
       setUser(data.user)
-      navigate('/dashboard')
+      navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed')
     } finally {
@@ -30,60 +30,74 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-        <div className="mb-6 flex items-center gap-2">
-          <Flame className="h-7 w-7 text-emerald-600" />
-          <span className="text-xl font-bold">freefolio</span>
-        </div>
-        <h1 className="mb-1 text-lg font-semibold">Welcome back</h1>
-        <p className="mb-6 text-sm text-slate-500">Track your net worth and plan your escape.</p>
+    <AuthShell title="Welcome back" subtitle="Track your net worth and plan your escape.">
+      {error && <div style={errorBox}>{error}</div>}
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
+        <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={input} />
+        <button type="submit" disabled={loading} style={primaryBtn}>
+          {loading ? <Spinner className="border-white/40 border-t-white" /> : 'Log in'}
+        </button>
+      </form>
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
-        )}
-
-        <form onSubmit={submit} className="space-y-3">
-          <input
-            type="email"
-            required
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-          />
-          <input
-            type="password"
-            required
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {loading ? <Spinner className="border-white/40 border-t-white" /> : 'Log in'}
-          </button>
-        </form>
-
-        <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
-          <div className="h-px flex-1 bg-slate-200" /> or <div className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        <div className="flex justify-center">
-          <GoogleSignInButton onError={setError} />
-        </div>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
-          No account?{' '}
-          <Link to="/register" className="font-semibold text-emerald-600">
-            Sign up
-          </Link>
-        </p>
+      <div style={divider}>
+        <div style={line} /> or <div style={line} />
       </div>
-    </div>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <GoogleSignInButton onError={setError} />
+      </div>
+
+      <p style={{ marginTop: 22, textAlign: 'center', fontSize: 14, color: '#8A90A2' }}>
+        No account?{' '}
+        <Link to="/register" style={{ fontWeight: 700 }}>
+          Sign up
+        </Link>
+      </p>
+    </AuthShell>
   )
 }
+
+const input: React.CSSProperties = {
+  width: '100%',
+  background: 'rgba(255,255,255,0.05)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 10,
+  padding: '11px 13px',
+  color: '#F2F4F8',
+  fontFamily: 'inherit',
+  fontSize: 14,
+}
+const primaryBtn: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  width: '100%',
+  padding: '11px 0',
+  borderRadius: 10,
+  border: 'none',
+  background: '#22E38A',
+  color: '#04140C',
+  fontWeight: 700,
+  fontSize: 14,
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+}
+const errorBox: React.CSSProperties = {
+  marginBottom: 16,
+  borderRadius: 10,
+  background: 'rgba(255,84,112,0.1)',
+  border: '1px solid rgba(255,84,112,0.3)',
+  padding: '9px 12px',
+  fontSize: 13,
+  color: '#FF5470',
+}
+const divider: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  margin: '16px 0',
+  fontSize: 12,
+  color: '#8A90A2',
+}
+const line: React.CSSProperties = { height: 1, flex: 1, background: 'rgba(255,255,255,0.1)' }

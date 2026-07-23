@@ -12,7 +12,6 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     select: {
       id: true,
       email: true,
-      baseCurrency: true,
       createdAt: true,
       profile: { select: { firstName: true, lastName: true } },
     },
@@ -24,28 +23,17 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   res.json({ profile: user })
 })
 
-// PATCH /api/profile — update name and reporting currency.
+// PATCH /api/profile — update display name.
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { firstName, lastName, baseCurrency } = req.body
-
-  if (baseCurrency) {
-    await prisma.user.update({
-      where: { id: req.userId },
-      data: { baseCurrency: String(baseCurrency).toUpperCase().slice(0, 3) },
-    })
-  }
-
-  if (firstName != null || lastName != null) {
-    await prisma.profile.upsert({
-      where: { userId: req.userId! },
-      create: { userId: req.userId!, firstName: firstName || '', lastName: lastName || '' },
-      update: {
-        firstName: firstName ?? undefined,
-        lastName: lastName ?? undefined,
-      },
-    })
-  }
-
+  const { firstName, lastName } = req.body
+  await prisma.profile.upsert({
+    where: { userId: req.userId! },
+    create: { userId: req.userId!, firstName: firstName || '', lastName: lastName || '' },
+    update: {
+      firstName: firstName ?? undefined,
+      lastName: lastName ?? undefined,
+    },
+  })
   res.json({ ok: true })
 })
 

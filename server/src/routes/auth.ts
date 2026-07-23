@@ -37,7 +37,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       email,
       password: hashed,
       profile: { create: { firstName: '', lastName: '' } },
-      retirementPlan: { create: {} },
+      projection: { create: {} },
     },
   })
 
@@ -84,7 +84,7 @@ router.get('/me', async (req: Request, res: Response): Promise<void> => {
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, isAdmin: true, baseCurrency: true, createdAt: true },
+      select: { id: true, email: true, isAdmin: true, createdAt: true },
     })
     if (!user) {
       res.status(404).json({ error: 'User not found' })
@@ -123,7 +123,7 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
         data: {
           email,
           profile: { create: { firstName: given_name || '', lastName: family_name || '' } },
-          retirementPlan: { create: {} },
+          projection: { create: {} },
         },
         include: { profile: true },
       })

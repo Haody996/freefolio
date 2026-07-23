@@ -2,38 +2,40 @@ import 'dotenv/config'
 import { Worker } from 'bullmq'
 import { connection, QUEUE_PRICES } from '../lib/queue'
 import prisma from '../lib/prisma'
-import { getQuotes, AssetTypeLike } from '../lib/prices'
+import { getQuote } from '../lib/prices'
+import { Category } from '@prisma/client'
 
-// Pull the distinct set of symbols any user actually holds, then fetch fresh
-// quotes and upsert them into the PriceQuote cache the app reads from.
+// Only market-priced categories get live quotes; cash/other are manual.
+function pricedAssetType(cat: Category): 'STOCK' | 'CRYPTO' | null {
+  if (cat === 'CRYPTO') return 'CRYPTO'
+  if (cat === 'STOCKS' || cat === 'BONDS') return 'STOCK'
+  return null
+}
+
+// Pull fresh quotes for every market-priced holding, rolling the old price
+// into prevClose so day-change stays meaningful.
 async function refreshAllPrices(): Promise<number> {
   const holdings = await prisma.holding.findMany({
-    distinct: ['symbol', 'assetType'],
-    select: { symbol: true, assetType: true },
+    where: { category: { in: ['STOCKS', 'CRYPTO', 'BONDS'] } },
   })
   if (holdings.length === 0) {
-    console.log('[price-refresh] No holdings to price')
+    console.log('[price-refresh] No market-priced holdings')
     return 0
   }
 
-  const quotes = await getQuotes(
-    holdings.map((h) => ({ symbol: h.symbol, assetType: h.assetType as AssetTypeLike }))
-  )
-
-  // Map quote back to its asset type (getQuotes preserves symbol but not type).
-  const typeBySymbol = new Map(holdings.map((h) => [h.symbol.toUpperCase(), h.assetType]))
-
   let updated = 0
-  for (const q of quotes) {
-    const assetType = typeBySymbol.get(q.symbol.toUpperCase()) ?? 'STOCK'
-    await prisma.priceQuote.upsert({
-      where: { symbol_assetType: { symbol: q.symbol, assetType } },
-      create: { symbol: q.symbol, assetType, price: q.price, currency: q.currency },
-      update: { price: q.price, currency: q.currency, asOf: new Date() },
+  for (const h of holdings) {
+    const assetType = pricedAssetType(h.category)
+    if (!assetType) continue
+    const quote = await getQuote(h.symbol, assetType)
+    if (!quote) continue
+    await prisma.holding.update({
+      where: { id: h.id },
+      data: { prevClose: h.price || quote.price, price: quote.price },
     })
     updated++
   }
-  console.log(`[price-refresh] Updated ${updated}/${holdings.length} symbols`)
+  console.log(`[price-refresh] Updated ${updated}/${holdings.length} holdings`)
   return updated
 }
 

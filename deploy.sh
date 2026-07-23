@@ -15,4 +15,4 @@ docker compose run --rm app npx prisma migrate deploy
 echo "→ Restarting services..."
 docker compose up -d
 
-echo "✓ Deployed → https://freefolio.net"
+echo "✓ Deployed → https://getfreefolio.com"
