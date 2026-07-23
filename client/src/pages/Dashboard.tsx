@@ -243,17 +243,19 @@ export default function Dashboard() {
         <section style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20 }}>
           <div style={panel}>
             <div style={panelTitle}>Allocation</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ flexShrink: 0 }}>
                 <DonutChart alloc={alloc} total={totals.total} privacy={privacy} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1, minWidth: 0 }}>
                 {alloc.map((a) => (
-                  <div key={a.cat} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13 }}>
+                  <div key={a.cat} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, minWidth: 0 }}>
                     <span style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: a.color }} />
-                    <span style={{ color: '#C9CDD8' }}>{CAT_LABEL[a.cat]}</span>
-                    <span style={{ marginLeft: 'auto', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{pct(a.pct)}</span>
-                    <span style={{ color: '#8A90A2', width: 52, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ color: '#C9CDD8', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {CAT_LABEL[a.cat]}
+                    </span>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>{pct(a.pct)}</span>
+                    <span style={{ color: '#8A90A2', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {mask(fmtCompact(a.value), privacy)}
                     </span>
                   </div>

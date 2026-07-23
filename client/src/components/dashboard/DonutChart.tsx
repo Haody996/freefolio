@@ -38,7 +38,7 @@ export default function DonutChart({
   })
 
   return (
-    <svg viewBox={`0 0 ${sz} ${sz}`} width={180} height={180} style={{ display: 'block' }}>
+    <svg viewBox={`0 0 ${sz} ${sz}`} width={140} height={140} style={{ display: 'block' }}>
       <g transform={`rotate(-90 ${cx} ${cy})`}>{segs}</g>
       <text x={cx} y={cy - 1} textAnchor="middle" fill="#F2F4F8" fontSize={22} fontWeight={700} fontFamily="'Space Grotesk'">
         {mask(fmtCompact(total), privacy)}
