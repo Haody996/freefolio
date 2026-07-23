@@ -240,7 +240,7 @@ export default function Dashboard() {
         />
 
         {/* Allocation + Snapshot */}
-        <section style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 20 }}>
           <div style={panel}>
             <div style={panelTitle}>Allocation</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
