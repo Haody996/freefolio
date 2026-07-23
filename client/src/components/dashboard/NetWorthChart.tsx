@@ -76,20 +76,22 @@ export default function NetWorthChart({
     dragging.current = false
   }
 
+  // Tooltip date: precise (day-level), with year on longer ranges.
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: range === 'ALL' || range === '1Y' ? '2-digit' : undefined })
 
-  // Axis labels (unchanged from the static chart).
+  // Axis label format: day-level for short ranges, month/year for long ones.
+  const axisFmt: Intl.DateTimeFormatOptions =
+    range === '1M' || range === '3M'
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', year: '2-digit' }
+
   const labels = [0, 1, 2, 3, 4].map((k) => {
     const idx = Math.round((k / 4) * (values.length - 1))
     const dd = dates[idx]
-    const lbl =
-      range === 'ALL'
-        ? dd.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-        : dd.toLocaleDateString('en-US', { month: 'short', day: range === '1M' ? 'numeric' : undefined })
     return (
       <text key={`x${k}`} x={sc.x(idx)} y={H - 6} textAnchor={k === 0 ? 'start' : k === 4 ? 'end' : 'middle'} fill="#8A90A2" fontSize={11}>
-        {lbl}
+        {dd.toLocaleDateString('en-US', axisFmt)}
       </text>
     )
   })

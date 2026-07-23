@@ -3,7 +3,20 @@ import { fmtUSD, signedUSD, signedPct, mask } from '../../lib/portfolio'
 
 export type Range = '1M' | '3M' | '1Y' | 'ALL'
 const RANGES: Range[] = ['1M', '3M', '1Y', 'ALL']
-const RANGE_COUNT: Record<Range, number> = { '1M': 6, '3M': 13, '1Y': 52, ALL: Infinity }
+// Window by actual elapsed days — works whether history is daily or weekly.
+const RANGE_DAYS: Record<Range, number> = { '1M': 31, '3M': 93, '1Y': 366, ALL: Infinity }
+
+// Slice the series to the points within `range` of the most recent point,
+// always keeping at least the last two points so the chart can draw.
+function sliceRange(values: number[], dates: Date[], range: Range): { v: number[]; d: Date[] } {
+  if (range === 'ALL' || values.length <= 2) return { v: values, d: dates }
+  const end = dates[dates.length - 1]?.getTime() ?? Date.now()
+  const cutoff = end - RANGE_DAYS[range] * 86400_000
+  let from = dates.findIndex((dt) => dt.getTime() >= cutoff)
+  if (from < 0) from = 0
+  from = Math.min(from, values.length - 2) // guarantee ≥ 2 points
+  return { v: values.slice(from), d: dates.slice(from) }
+}
 
 export default function NetWorthPanel({
   values,
@@ -28,9 +41,7 @@ export default function NetWorthPanel({
   onSyncHistory?: () => void
   syncingHistory?: boolean
 }) {
-  const cnt = Math.min(RANGE_COUNT[range], values.length)
-  const v = values.slice(-cnt)
-  const d = dates.slice(-cnt)
+  const { v, d } = sliceRange(values, dates, range)
   const dayColor = day >= 0 ? '#22E38A' : '#FF5470'
 
   return (
