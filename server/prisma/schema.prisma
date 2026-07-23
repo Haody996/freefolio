@@ -1,0 +1,163 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth / user ─────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String?
+  isAdmin     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  // Currency all balances/net worth are reported in (ISO 4217).
+  baseCurrency String  @default("USD")
+
+  profile         Profile?
+  accounts        Account[]
+  netWorthHistory NetWorthSnapshot[]
+  retirementPlan  RetirementPlan?
+}
+
+model Profile {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String  @default("")
+  lastName  String  @default("")
+}
+
+// ─── Accounts & balances ─────────────────────────────────────────────
+
+enum AccountKind {
+  ASSET
+  LIABILITY
+}
+
+enum AccountCategory {
+  CASH
+  INVESTMENT
+  RETIREMENT
+  REAL_ESTATE
+  CRYPTO
+  VEHICLE
+  LOAN
+  CREDIT_CARD
+  MORTGAGE
+  OTHER
+}
+
+model Account {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  kind        AccountKind     @default(ASSET)
+  category    AccountCategory @default(CASH)
+  institution String?
+  currency    String          @default("USD")
+
+  // Investment accounts derive value from holdings; others from their latest Balance.
+  isInvestment Boolean @default(false)
+  // Exclude from net-worth totals without deleting history (e.g. archived accounts).
+  includeInNetWorth Boolean @default(true)
+  isActive          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  balances Balance[]
+  holdings Holding[]
+
+  @@index([userId])
+}
+
+// A dated manual balance for an account. The most recent one is the account's value.
+model Balance {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+  // Stored as a positive magnitude; liabilities are subtracted when aggregating.
+  amount    Float
+
+  @@index([accountId, date])
+}
+
+// ─── Holdings & market prices ────────────────────────────────────────
+
+enum AssetType {
+  STOCK
+  ETF
+  CRYPTO
+  MUTUAL_FUND
+  OTHER
+}
+
+model Holding {
+  id        String    @id @default(cuid())
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol    String
+  assetType AssetType @default(STOCK)
+  quantity  Float
+  costBasis Float?    // total cost paid, in account currency (optional)
+  createdAt DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([symbol])
+}
+
+// Cached latest market price per (symbol, assetType). Refreshed by the worker.
+model PriceQuote {
+  id        String    @id @default(cuid())
+  symbol    String
+  assetType AssetType @default(STOCK)
+  price     Float
+  currency  String    @default("USD")
+  asOf      DateTime  @default(now())
+
+  @@unique([symbol, assetType])
+  @@index([symbol])
+}
+
+// ─── Net-worth history ───────────────────────────────────────────────
+
+// One row per user per day. Recomputed by the snapshot worker/scheduler.
+model NetWorthSnapshot {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date             DateTime @db.Date
+  totalAssets      Float
+  totalLiabilities Float
+  netWorth         Float
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+// ─── Retirement (FIRE) plan ──────────────────────────────────────────
+
+model RetirementPlan {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  currentAge          Int     @default(30)
+  retirementAge       Int     @default(50)
+  currentSavings      Float   @default(0)
+  annualContribution  Float   @default(0)
+  annualExpenses      Float   @default(40000)
+  expectedReturnPct   Float   @default(7)   // nominal annual return
+  inflationPct        Float   @default(3)
+  withdrawalRatePct   Float   @default(4)   // safe withdrawal rate (the "4% rule")
+
+  updatedAt DateTime @updatedAt
+}
