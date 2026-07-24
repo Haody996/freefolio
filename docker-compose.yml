@@ -67,5 +67,22 @@ services:
       - redis
     restart: unless-stopped
 
+  # Applies recurring auto-invest (DCA) contributions when they come due.
+  auto-invest-worker:
+    build:
+      context: .
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+    command: node dist/workers/auto-invest-worker.js
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://freefolio:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/freefolio
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
 volumes:
   postgres_data:

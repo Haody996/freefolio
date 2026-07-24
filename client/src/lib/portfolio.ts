@@ -40,6 +40,20 @@ export const TREATMENTS: { value: TaxTreatment; label: string; color: string }[]
   { value: 'TAXABLE', label: 'Taxable', color: '#35A0FF' },
 ]
 
+export type AutoFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'SEMIMONTHLY' | 'MONTHLY'
+
+export const AUTO_FREQUENCIES: { value: AutoFrequency; label: string; short: string }[] = [
+  { value: 'DAILY', label: 'Daily', short: '/day' },
+  { value: 'WEEKLY', label: 'Weekly', short: '/wk' },
+  { value: 'BIWEEKLY', label: 'Every 2 weeks', short: '/2wk' },
+  { value: 'SEMIMONTHLY', label: 'Twice a month (1st & 15th)', short: '×2/mo' },
+  { value: 'MONTHLY', label: 'Monthly', short: '/mo' },
+]
+const FREQ_SHORT = new Map(AUTO_FREQUENCIES.map((f) => [f.value, f.short]))
+export function autoFreqShort(f: AutoFrequency): string {
+  return FREQ_SHORT.get(f) ?? ''
+}
+
 export interface Holding {
   id: string
   symbol: string
@@ -49,6 +63,9 @@ export interface Holding {
   quantity: number
   price: number
   prevClose: number
+  autoAmount: number | null
+  autoFrequency: AutoFrequency | null
+  autoNextAt: string | null
 }
 
 export interface TreatmentSegment {

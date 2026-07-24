@@ -22,6 +22,7 @@ import {
   catColor,
   CAT_LABEL,
   accountLabel,
+  autoFreqShort,
   computeTaxBreakdown,
 } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
@@ -286,6 +287,11 @@ export default function Dashboard() {
               {accountLabel(h.accountType)}
             </span>
           )
+          const autoTag = h.autoAmount && h.autoFrequency && (
+            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#22E38A', background: 'rgba(34,227,138,0.12)', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>
+              ⟳ ${Math.round(h.autoAmount)}{autoFreqShort(h.autoFrequency)}
+            </span>
+          )
 
           if (isMobile) {
             return (
@@ -300,6 +306,7 @@ export default function Dashboard() {
                     <div style={{ fontWeight: 700, fontSize: 14 }}>
                       {h.symbol}
                       {acctTag}
+                      {autoTag}
                     </div>
                     <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {fmtUSD(h.price, 2)} · {shares}

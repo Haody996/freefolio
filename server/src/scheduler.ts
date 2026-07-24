@@ -1,4 +1,4 @@
-import { pricesQueue, netWorthQueue } from './lib/queue'
+import { pricesQueue, netWorthQueue, autoInvestQueue } from './lib/queue'
 
 // Registers repeatable BullMQ jobs. The workers (price-refresh-worker,
 // networth-snapshot-worker) consume these. Repeatable jobs are deduped by key,
@@ -13,6 +13,18 @@ export async function initScheduler(): Promise<void> {
     {
       repeat: { every: priceIntervalMin * 60 * 1000 },
       jobId: 'price-refresh',
+      removeOnComplete: true,
+      removeOnFail: 100,
+    }
+  )
+
+  // Apply due auto-invest (DCA) contributions at 00:00 UTC — before the snapshot.
+  await autoInvestQueue.add(
+    'process-due',
+    {},
+    {
+      repeat: { pattern: '0 0 * * *' },
+      jobId: 'auto-invest-daily',
       removeOnComplete: true,
       removeOnFail: 100,
     }

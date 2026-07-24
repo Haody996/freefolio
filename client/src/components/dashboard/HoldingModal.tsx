@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import api from '../../lib/api'
-import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO, ACCOUNT_TYPES, accountTreatment, TREATMENTS } from '../../lib/portfolio'
-import type { Category, AccountType, Holding } from '../../lib/portfolio'
+import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO, ACCOUNT_TYPES, accountTreatment, TREATMENTS, AUTO_FREQUENCIES } from '../../lib/portfolio'
+import type { Category, AccountType, AutoFrequency, Holding } from '../../lib/portfolio'
 
 export interface Draft {
   symbol: string
@@ -11,6 +11,9 @@ export interface Draft {
   quantity: string
   price: string
   prevClose: string
+  autoOn: boolean
+  autoAmount: string
+  autoFrequency: AutoFrequency
 }
 
 export interface SavePayload {
@@ -21,10 +24,13 @@ export interface SavePayload {
   quantity: number
   price: number
   prevClose: number
+  autoAmount: number | null
+  autoFrequency: AutoFrequency | null
 }
 
 function toDraft(h: Holding | null): Draft {
-  if (!h) return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', quantity: '', price: '', prevClose: '' }
+  if (!h)
+    return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', quantity: '', price: '', prevClose: '', autoOn: false, autoAmount: '', autoFrequency: 'MONTHLY' }
   return {
     symbol: h.symbol,
     name: h.name,
@@ -33,6 +39,9 @@ function toDraft(h: Holding | null): Draft {
     quantity: String(h.quantity),
     price: String(h.price),
     prevClose: String(h.prevClose),
+    autoOn: h.autoAmount != null && h.autoAmount > 0,
+    autoAmount: h.autoAmount != null ? String(h.autoAmount) : '',
+    autoFrequency: h.autoFrequency ?? 'MONTHLY',
   }
 }
 
@@ -122,6 +131,7 @@ export default function HoldingModal({
   function save() {
     const price = parseFloat(draft.price) || 0
     const symbol = draft.symbol.toUpperCase().trim() || 'NEW'
+    const autoAmt = draft.autoOn && parseFloat(draft.autoAmount) > 0 ? parseFloat(draft.autoAmount) : null
     onSave({
       symbol,
       name: draft.name.trim() || symbol,
@@ -130,6 +140,8 @@ export default function HoldingModal({
       quantity: parseFloat(draft.quantity) || 0,
       price,
       prevClose: draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price,
+      autoAmount: autoAmt,
+      autoFrequency: autoAmt != null ? draft.autoFrequency : null,
     })
   }
 
@@ -304,6 +316,60 @@ export default function HoldingModal({
               For cash or manual entries, set quantity to 1 and price to the total value.
             </div>
           )}
+
+          {/* Auto-invest (recurring DCA) */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={draft.autoOn}
+                onChange={(e) => set('autoOn', e.target.checked)}
+                style={{ accentColor: '#22E38A', width: 16, height: 16 }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Auto-invest on a schedule</span>
+            </label>
+
+            {draft.autoOn && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={labelStyle}>Amount</label>
+                    <div style={{ display: 'flex', alignItems: 'center', ...inputStyle, padding: 0 }}>
+                      <span style={{ paddingLeft: 11, color: '#8A90A2', fontSize: 14 }}>$</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={draft.autoAmount}
+                        onChange={(e) => set('autoAmount', e.target.value)}
+                        placeholder="500"
+                        style={{ width: '100%', minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#F2F4F8', fontSize: 14, padding: '11px 11px', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={labelStyle}>Frequency</label>
+                    <select
+                      value={draft.autoFrequency}
+                      onChange={(e) => set('autoFrequency', e.target.value as AutoFrequency)}
+                      style={{ ...inputStyle, cursor: 'pointer' }}
+                    >
+                      {AUTO_FREQUENCIES.map((f) => (
+                        <option key={f.value} value={f.value} style={{ background: '#16181F' }}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <span style={{ fontSize: 12, color: '#8A90A2' }}>
+                  Adds{' '}
+                  <b style={{ color: '#22E38A' }}>${draft.autoAmount || '0'}</b> of{' '}
+                  {draft.symbol.toUpperCase() || 'this holding'}{' '}
+                  {AUTO_FREQUENCIES.find((f) => f.value === draft.autoFrequency)?.label.toLowerCase()}, converted to shares at that day's price.
+                </span>
+              </>
+            )}
+          </div>
 
           {dup && (
             <div

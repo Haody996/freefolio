@@ -2,7 +2,8 @@ import { Router, Response } from 'express'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
 import prisma from '../lib/prisma'
 import { getQuote } from '../lib/prices'
-import { Category, AccountType } from '@prisma/client'
+import { nextRun } from '../lib/auto-invest'
+import { Category, AccountType, AutoFrequency } from '@prisma/client'
 
 const router = Router()
 router.use(authMiddleware)
@@ -26,6 +27,28 @@ function normCategory(c: unknown): Category {
 function normAccountType(a: unknown): AccountType {
   const up = String(a || '').toUpperCase()
   return (ACCOUNT_TYPES as string[]).includes(up) ? (up as AccountType) : 'TAXABLE'
+}
+
+const AUTO_FREQS: AutoFrequency[] = ['DAILY', 'WEEKLY', 'BIWEEKLY', 'SEMIMONTHLY', 'MONTHLY']
+function normAutoFrequency(f: unknown): AutoFrequency | null {
+  const up = String(f || '').toUpperCase()
+  return (AUTO_FREQS as string[]).includes(up) ? (up as AutoFrequency) : null
+}
+
+// Build the auto-invest fields from a request body. Disabled → all null.
+// Preserves the existing schedule when the amount is on and the frequency is unchanged.
+function autoInvestData(
+  body: any,
+  currentFreq?: AutoFrequency | null,
+  currentNextAt?: Date | null
+): { autoAmount: number | null; autoFrequency: AutoFrequency | null; autoNextAt: Date | null } {
+  const amount = body.autoAmount != null && Number(body.autoAmount) > 0 ? Number(body.autoAmount) : null
+  const freq = amount != null ? normAutoFrequency(body.autoFrequency) : null
+  if (amount == null || freq == null) {
+    return { autoAmount: null, autoFrequency: null, autoNextAt: null }
+  }
+  const autoNextAt = currentFreq === freq && currentNextAt ? currentNextAt : nextRun(new Date(), freq)
+  return { autoAmount: amount, autoFrequency: freq, autoNextAt }
 }
 
 // Map a holding category to the price provider's asset routing.
@@ -76,6 +99,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
         prevClose: pc,
         name: String(name || '').trim() || existing.name,
         category: cat,
+        ...autoInvestData(req.body, existing.autoFrequency, existing.autoNextAt),
       },
     })
     res.status(200).json({ holding: combined, combined: true, previousQuantity: existing.quantity })
@@ -92,6 +116,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       quantity: qty,
       price: p,
       prevClose: pc,
+      ...autoInvestData(req.body),
     },
   })
   res.status(201).json({ holding, combined: false })
@@ -108,6 +133,12 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
   const { symbol, name, category, accountType, quantity, price, prevClose } = req.body
   const p = price != null ? Number(price) : existing.price
+  // Only touch auto-invest fields when the client sends autoAmount (so plain
+  // edits don't wipe an existing schedule).
+  const autoData =
+    'autoAmount' in req.body
+      ? autoInvestData(req.body, existing.autoFrequency, existing.autoNextAt)
+      : {}
   const holding = await prisma.holding.update({
     where: { id: existing.id },
     data: {
@@ -118,6 +149,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       quantity: quantity != null ? Number(quantity) : undefined,
       price: price != null ? p : undefined,
       prevClose: prevClose != null ? Number(prevClose) : undefined,
+      ...autoData,
     },
   })
   res.json({ holding })

@@ -55,6 +55,15 @@ enum AccountType {
   OTHER
 }
 
+// Recurring auto-invest (DCA) cadence.
+enum AutoFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  SEMIMONTHLY
+  MONTHLY
+}
+
 model Holding {
   id          String      @id @default(cuid())
   userId      String
@@ -66,6 +75,14 @@ model Holding {
   quantity    Float       @default(0)
   price       Float       @default(0)
   prevClose   Float       @default(0)
+
+  // Recurring auto-invest: add $autoAmount of this holding every period. The
+  // auto-invest worker converts the dollar amount to shares at the current price.
+  autoAmount    Float?
+  autoFrequency AutoFrequency?
+  autoNextAt    DateTime?
+  autoLastAt    DateTime?
+
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
