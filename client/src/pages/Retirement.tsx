@@ -4,9 +4,11 @@ import api from '../lib/api'
 import { useIsMobile } from '../lib/useIsMobile'
 import Spinner from '../components/ui/Spinner'
 import RetirementChart from '../components/dashboard/RetirementChart'
-import { computeTotals, fmtUSD, fmtCompact } from '../lib/portfolio'
+import FanChart from '../components/dashboard/FanChart'
+import YearBars from '../components/dashboard/YearBars'
+import { computeTotals, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
-import { simulateRetirement } from '../lib/retirement'
+import { simulateRetirement, backtestRetirement } from '../lib/retirement'
 import type { RetirementInput } from '../lib/retirement'
 
 type Plan = RetirementInput
@@ -75,9 +77,12 @@ function StatCard({ label, value, sub, color, accent }: { label: string; value: 
   )
 }
 
+type AnalysisTab = 'probability' | 'confidence' | 'cashflow' | 'withdrawals'
+
 export default function Retirement() {
   const isMobile = useIsMobile()
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [tab, setTab] = useState<AnalysisTab>('probability')
 
   const holdingsQ = useQuery<{ holdings: Holding[] }>({
     queryKey: ['holdings'],
@@ -123,7 +128,42 @@ export default function Retirement() {
   }
 
   const result = simulateRetirement(plan)
+  const backtest = backtestRetirement(plan)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
+
+  // Post-retirement per-year detail for the analysis charts.
+  const drawYears = result.series.filter((s) => s.phase === 'draw')
+  const cashflowData = drawYears.map((s) => ({
+    age: s.age,
+    segments: [
+      { value: s.ss, color: '#35A0FF' },
+      { value: s.pension, color: '#9B7CFF' },
+      { value: s.netWithdrawal, color: '#22E38A' },
+      { value: s.taxes, color: '#FF5470' },
+    ],
+  }))
+  const safeRates = drawYears.filter((s) => s.shortage === 0).map((s) => s.withdrawalRate)
+  const wdCap = Math.max(0.06, Math.min(0.15, (safeRates.length ? Math.max(...safeRates) : 0.04) * 1.25))
+  const withdrawalData = drawYears.map((s) => ({
+    age: s.age,
+    segments: [
+      s.shortage > 0
+        ? { value: wdCap, color: '#FF5470' }
+        : { value: Math.min(s.withdrawalRate, wdCap), color: '#F5A524' },
+    ],
+  }))
+  const shortfallYears = drawYears.filter((s) => s.shortage > 0).length
+  const stablePct = drawYears.length ? (drawYears.length - shortfallYears) / drawYears.length : 1
+  const totalShortage = drawYears.reduce((a, s) => a + s.shortage, 0)
+
+  const successColor = backtest.successRate >= 0.85 ? '#22E38A' : backtest.successRate >= 0.7 ? '#F5A524' : '#FF5470'
+
+  const TABS: { id: AnalysisTab; label: string }[] = [
+    { id: 'probability', label: 'Probability' },
+    { id: 'confidence', label: 'Confidence' },
+    { id: 'cashflow', label: 'Cash flow' },
+    { id: 'withdrawals', label: 'Withdrawals' },
+  ]
 
   return (
     <>
@@ -230,6 +270,105 @@ export default function Retirement() {
           </div>
         </div>
       </div>
+
+      {/* Retirement Analysis — tabbed Monte Carlo views */}
+      <section style={panel}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, fontFamily: "'Space Grotesk'", fontSize: 18, fontWeight: 700 }}>Retirement analysis</h2>
+            <div style={{ fontSize: 13, color: '#8A90A2', marginTop: 3 }}>
+              Monte Carlo stress-test · {backtest.trials.toLocaleString()} simulations over ~100 years of market volatility
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 11, flexWrap: 'wrap' }}>
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                  background: tab === t.id ? 'rgba(34,227,138,0.16)' : 'transparent',
+                  color: tab === t.id ? '#22E38A' : '#8A90A2',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'probability' && (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap: 24, alignItems: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Space Grotesk'", fontSize: 52, fontWeight: 700, color: successColor, lineHeight: 1 }}>{pct(backtest.successRate)}</div>
+              <div style={{ fontSize: 13, color: '#8A90A2', marginTop: 6 }}>chance your money lasts to age {plan.endAge}</div>
+              <div style={{ marginTop: 14, height: 10, borderRadius: 6, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${(backtest.successRate * 100).toFixed(1)}%`, background: successColor, borderRadius: 6 }} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Stat label="Median ending balance" value={fmtCompact(backtest.medianEnd)} sub={`at age ${plan.endAge}`} />
+              <Stat label="Pessimistic (10th pct)" value={fmtCompact(backtest.p10End)} sub="1-in-10 downside" />
+              <Stat label="Deterministic path" value={result.lasts ? `Lasts to ${plan.endAge}` : `Runs out at ${result.depletedAge}`} sub="expected returns" color={result.lasts ? '#22E38A' : '#FF5470'} />
+              <Stat label="Worst backtest case" value={backtest.worstDepletionAge ? `Depletes at ${backtest.worstDepletionAge}` : 'Always survived'} sub="across all runs" color={backtest.worstDepletionAge ? '#F5A524' : '#22E38A'} />
+            </div>
+          </div>
+        )}
+
+        {tab === 'confidence' && (
+          <>
+            <div style={{ fontSize: 13, color: '#8A90A2', marginBottom: 8 }}>Range of portfolio outcomes by age (today's dollars).</div>
+            <FanChart bands={backtest.bands} retirementAge={plan.retirementAge} />
+            <Legend items={[{ c: 'rgba(124,92,255,0.30)', l: '25–75% range' }, { c: 'rgba(124,92,255,0.14)', l: '5–95% range' }, { c: '#7C5CFF', l: 'Median' }]} />
+          </>
+        )}
+
+        {tab === 'cashflow' && (
+          <>
+            <div style={{ fontSize: 13, color: '#8A90A2', marginBottom: 8 }}>Where each retirement year's spending comes from, plus tax drag.</div>
+            <YearBars data={cashflowData} yFormat={fmtCompact} height={260} />
+            <Legend items={[{ c: '#35A0FF', l: 'Social Security' }, { c: '#9B7CFF', l: 'Pension' }, { c: '#22E38A', l: 'Portfolio (net)' }, { c: '#FF5470', l: 'Taxes' }]} />
+          </>
+        )}
+
+        {tab === 'withdrawals' && (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 200px', gap: 20, alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#8A90A2', marginBottom: 8 }}>Portfolio withdrawal rate each year (dashed line = 4% rule).</div>
+              <YearBars data={withdrawalData} yFormat={(n) => pct(n)} yMax={wdCap} refLine={{ value: 0.04, label: '4%' }} height={260} />
+              <Legend items={[{ c: '#F5A524', l: 'Withdrawal rate' }, { c: '#FF5470', l: 'Shortfall year' }]} />
+            </div>
+            <div style={{ textAlign: isMobile ? 'left' : 'center' }}>
+              <div style={{ fontFamily: "'Space Grotesk'", fontSize: 30, fontWeight: 700 }}>{fmtUSD(Math.round(totalShortage))}</div>
+              <div style={{ fontSize: 13, color: '#8A90A2', marginBottom: 14 }}>lifetime income shortfall</div>
+              <div style={{ fontFamily: "'Space Grotesk'", fontSize: 30, fontWeight: 700, color: '#22E38A' }}>{pct(stablePct)}</div>
+              <div style={{ fontSize: 13, color: '#8A90A2' }}>of retirement years fully funded</div>
+            </div>
+          </div>
+        )}
+      </section>
     </>
+  )
+}
+
+function Stat({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16 }}>
+      <div style={{ fontSize: 11, letterSpacing: 0.6, color: '#8A90A2', fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 22, fontWeight: 700, margin: '6px 0 2px', color: color || '#F2F4F8', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: '#8A90A2' }}>{sub}</div>}
+    </div>
+  )
+}
+
+function Legend({ items }: { items: { c: string; l: string }[] }) {
+  return (
+    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: '#8A90A2', marginTop: 10 }}>
+      {items.map((x) => (
+        <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: x.c }} /> {x.l}
+        </span>
+      ))}
+    </div>
   )
 }
