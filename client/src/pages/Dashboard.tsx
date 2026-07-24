@@ -12,6 +12,7 @@ import DonutChart from '../components/dashboard/DonutChart'
 import ProjectionChart from '../components/dashboard/ProjectionChart'
 import HoldingModal from '../components/dashboard/HoldingModal'
 import type { SavePayload } from '../components/dashboard/HoldingModal'
+import EditableNumber from '../components/dashboard/EditableNumber'
 import {
   computeTotals,
   computeAllocation,
@@ -199,13 +200,23 @@ export default function Dashboard() {
     { label: 'Cash Buffer', value: pct(cashSeg.pct), sub: mask(fmtCompact(cashSeg.value), privacy), color: '#35A0FF' },
   ]
 
-  const controls: { label: string; display: string; min: number; max: number; step: number; value: number; field: keyof ProjectionInput }[] = proj
+  const controls: {
+    label: string
+    format: (n: number) => string
+    min: number
+    max: number
+    step: number
+    value: number
+    field: keyof ProjectionInput
+    allowOverMax?: boolean
+    integer?: boolean
+  }[] = proj
     ? [
-        { label: 'Starting capital', display: fmtUSD(proj.start), min: 0, max: 1_000_000, step: 5000, value: proj.start, field: 'start' },
-        { label: 'Monthly contribution', display: fmtUSD(proj.monthly), min: 0, max: 15_000, step: 250, value: proj.monthly, field: 'monthly' },
-        { label: 'Annual return', display: proj.ret + '%', min: 0, max: 15, step: 0.5, value: proj.ret, field: 'ret' },
-        { label: 'Time horizon', display: proj.years + ' yrs', min: 1, max: 50, step: 1, value: proj.years, field: 'years' },
-        { label: 'Inflation', display: proj.infl + '%', min: 0, max: 8, step: 0.5, value: proj.infl, field: 'infl' },
+        { label: 'Starting capital', format: (n) => fmtUSD(n), min: 0, max: 1_000_000, step: 5000, value: proj.start, field: 'start', allowOverMax: true },
+        { label: 'Monthly contribution', format: (n) => fmtUSD(n), min: 0, max: 15_000, step: 250, value: proj.monthly, field: 'monthly', allowOverMax: true },
+        { label: 'Annual return', format: (n) => n + '%', min: 0, max: 15, step: 0.5, value: proj.ret, field: 'ret' },
+        { label: 'Time horizon', format: (n) => n + ' yrs', min: 1, max: 50, step: 1, value: proj.years, field: 'years', integer: true },
+        { label: 'Inflation', format: (n) => n + '%', min: 0, max: 8, step: 0.5, value: proj.infl, field: 'infl' },
       ]
     : []
 
@@ -320,7 +331,7 @@ export default function Dashboard() {
             </div>
           )}
           {totals.en.map((h) => {
-            const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : `${h.quantity} sh`
+            const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : `${h.quantity}`
             const badge = (
               <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: catColor(h.category), color: '#04140C' }}>
                 {h.symbol.slice(0, 4)}
@@ -394,7 +405,15 @@ export default function Dashboard() {
                   <div key={c.field} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: 13, color: '#8A90A2', fontWeight: 600 }}>{c.label}</span>
-                      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk'", fontVariantNumeric: 'tabular-nums' }}>{c.display}</span>
+                      <EditableNumber
+                        value={c.value}
+                        format={c.format}
+                        min={c.min}
+                        max={c.max}
+                        allowOverMax={c.allowOverMax}
+                        integer={c.integer}
+                        onCommit={(n) => setProjField(c.field, n)}
+                      />
                     </div>
                     <input
                       type="range"
