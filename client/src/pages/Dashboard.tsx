@@ -6,6 +6,7 @@ import Spinner from '../components/ui/Spinner'
 import NetWorthPanel from '../components/dashboard/NetWorthPanel'
 import type { Range } from '../components/dashboard/NetWorthPanel'
 import DonutChart from '../components/dashboard/DonutChart'
+import InsightsPanel from '../components/dashboard/InsightsPanel'
 import HoldingModal from '../components/dashboard/HoldingModal'
 import type { SavePayload } from '../components/dashboard/HoldingModal'
 import {
@@ -170,6 +171,9 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* AI daily briefing */}
+      <InsightsPanel />
 
       {/* Net worth */}
       <NetWorthPanel
