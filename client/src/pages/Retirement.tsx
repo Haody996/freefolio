@@ -6,6 +6,7 @@ import Spinner from '../components/ui/Spinner'
 import RetirementChart from '../components/dashboard/RetirementChart'
 import FanChart from '../components/dashboard/FanChart'
 import YearBars from '../components/dashboard/YearBars'
+import EditableNumber from '../components/dashboard/EditableNumber'
 import { computeTotals, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
 import { simulateRetirement, backtestRetirement } from '../lib/retirement'
@@ -83,6 +84,8 @@ export default function Retirement() {
   const isMobile = useIsMobile()
   const [plan, setPlan] = useState<Plan | null>(null)
   const [tab, setTab] = useState<AnalysisTab>('probability')
+  // Analysis "what-if" override for the starting nest egg (null = use projected).
+  const [nestEgg, setNestEgg] = useState<number | null>(null)
 
   const holdingsQ = useQuery<{ holdings: Holding[] }>({
     queryKey: ['holdings'],
@@ -128,11 +131,17 @@ export default function Retirement() {
   }
 
   const result = simulateRetirement(plan)
-  const backtest = backtestRetirement(plan)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
 
+  // Retirement analysis: stress-test the drawdown from an (editable) starting
+  // nest egg, defaulting to the projected balance at retirement.
+  const effectiveNestEgg = nestEgg ?? Math.round(result.balanceAtRetirement)
+  const analysisPlan: Plan = { ...plan, currentAge: plan.retirementAge, startingCapital: effectiveNestEgg, monthlyContribution: 0 }
+  const analysis = simulateRetirement(analysisPlan)
+  const backtest = backtestRetirement(analysisPlan)
+
   // Post-retirement per-year detail for the analysis charts.
-  const drawYears = result.series.filter((s) => s.phase === 'draw')
+  const drawYears = analysis.series.filter((s) => s.phase === 'draw')
   const cashflowData = drawYears.map((s) => ({
     age: s.age,
     segments: [
@@ -297,6 +306,19 @@ export default function Retirement() {
           </div>
         </div>
 
+        {/* Editable starting nest egg (defaults to the projected balance at retirement) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(124,92,255,0.08)', border: '1px solid rgba(124,92,255,0.2)' }}>
+          <span style={{ fontSize: 13, color: '#C9CDD8', fontWeight: 600 }}>Starting nest egg at age {plan.retirementAge}:</span>
+          <EditableNumber value={effectiveNestEgg} format={(n) => fmtUSD(n)} min={0} max={100_000_000} allowOverMax onCommit={(n) => setNestEgg(n)} />
+          {nestEgg != null ? (
+            <button onClick={() => setNestEgg(null)} style={{ border: 'none', background: 'transparent', color: '#22E38A', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
+              ↺ use projected ({fmtCompact(result.balanceAtRetirement)})
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: '#8A90A2' }}>defaults to your projected nest egg — click the value to try a different amount</span>
+          )}
+        </div>
+
         {tab === 'probability' && (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap: 24, alignItems: 'center' }}>
             <div style={{ textAlign: 'center' }}>
@@ -309,7 +331,7 @@ export default function Retirement() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <Stat label="Median ending balance" value={fmtCompact(backtest.medianEnd)} sub={`at age ${plan.endAge}`} />
               <Stat label="Pessimistic (10th pct)" value={fmtCompact(backtest.p10End)} sub="1-in-10 downside" />
-              <Stat label="Deterministic path" value={result.lasts ? `Lasts to ${plan.endAge}` : `Runs out at ${result.depletedAge}`} sub="expected returns" color={result.lasts ? '#22E38A' : '#FF5470'} />
+              <Stat label="Deterministic path" value={analysis.lasts ? `Lasts to ${plan.endAge}` : `Runs out at ${analysis.depletedAge}`} sub="expected returns" color={analysis.lasts ? '#22E38A' : '#FF5470'} />
               <Stat label="Worst backtest case" value={backtest.worstDepletionAge ? `Depletes at ${backtest.worstDepletionAge}` : 'Always survived'} sub="across all runs" color={backtest.worstDepletionAge ? '#F5A524' : '#22E38A'} />
             </div>
           </div>
