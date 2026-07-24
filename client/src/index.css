@@ -55,3 +55,20 @@ input[type=range]::-moz-range-thumb {
 
 input::placeholder { color: #8A90A2; }
 input:focus { border-color: #22E38A !important; }
+
+/* Hide the browser's default number spinner everywhere — we use a custom stepper */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Custom NumberInput stepper buttons */
+.ff-step-btn:not(:disabled):hover {
+  background: rgba(34,227,138,0.14);
+  color: #22E38A;
+}
+.ff-step-btn:not(:disabled):active {
+  background: rgba(34,227,138,0.22);
+}

@@ -7,6 +7,7 @@ import RetirementChart from '../components/dashboard/RetirementChart'
 import FanChart from '../components/dashboard/FanChart'
 import YearBars from '../components/dashboard/YearBars'
 import EditableNumber from '../components/dashboard/EditableNumber'
+import NumberInput from '../components/dashboard/NumberInput'
 import { computeTotals, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
 import { simulateRetirement, backtestRetirement } from '../lib/retirement'
@@ -35,7 +36,7 @@ const groupTitle: React.CSSProperties = {
 }
 
 function Field({
-  label, value, onChange, prefix, suffix, integer, span,
+  label, value, onChange, prefix, suffix, integer, step, span,
 }: {
   label: string
   value: number
@@ -43,21 +44,13 @@ function Field({
   prefix?: string
   suffix?: string
   integer?: boolean
+  step?: number
   span?: boolean
 }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: span ? '1 / -1' : undefined }}>
       <span style={{ fontSize: 12, color: '#8A90A2', fontWeight: 600 }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, background: 'rgba(255,255,255,0.05)' }}>
-        {prefix && <span style={{ paddingLeft: 11, color: '#8A90A2', fontSize: 14 }}>{prefix}</span>}
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(integer ? Math.round(+e.target.value) : +e.target.value)}
-          style={{ width: '100%', minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#F2F4F8', fontSize: 14, padding: '10px 11px', fontVariantNumeric: 'tabular-nums', fontFamily: 'inherit' }}
-        />
-        {suffix && <span style={{ paddingRight: 11, color: '#8A90A2', fontSize: 14 }}>{suffix}</span>}
-      </div>
+      <NumberInput value={value} onChange={onChange} prefix={prefix} suffix={suffix} integer={integer} step={step ?? (integer ? 1 : undefined)} />
     </label>
   )
 }
@@ -198,29 +191,29 @@ export default function Retirement() {
           <div style={panel}>
             <div style={groupTitle}>Savings &amp; growth</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Current savings" value={plan.startingCapital} onChange={(n) => update('startingCapital', n)} prefix="$" span />
-              <Field label="Monthly contribution" value={plan.monthlyContribution} onChange={(n) => update('monthlyContribution', n)} prefix="$" span />
-              <Field label="Expected return" value={plan.expectedReturnPct} onChange={(n) => update('expectedReturnPct', n)} suffix="%" />
-              <Field label="Inflation" value={plan.inflationPct} onChange={(n) => update('inflationPct', n)} suffix="%" />
+              <Field label="Current savings" value={plan.startingCapital} onChange={(n) => update('startingCapital', n)} prefix="$" step={1000} span />
+              <Field label="Monthly contribution" value={plan.monthlyContribution} onChange={(n) => update('monthlyContribution', n)} prefix="$" step={100} span />
+              <Field label="Expected return" value={plan.expectedReturnPct} onChange={(n) => update('expectedReturnPct', n)} suffix="%" step={0.1} />
+              <Field label="Inflation" value={plan.inflationPct} onChange={(n) => update('inflationPct', n)} suffix="%" step={0.1} />
             </div>
           </div>
 
           <div style={panel}>
             <div style={groupTitle}>Retirement spending</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Annual spending" value={plan.annualSpending} onChange={(n) => update('annualSpending', n)} prefix="$" span />
-              <Field label="Vacation budget" value={plan.vacationBudget} onChange={(n) => update('vacationBudget', n)} prefix="$" />
+              <Field label="Annual spending" value={plan.annualSpending} onChange={(n) => update('annualSpending', n)} prefix="$" step={1000} span />
+              <Field label="Vacation budget" value={plan.vacationBudget} onChange={(n) => update('vacationBudget', n)} prefix="$" step={500} />
               <Field label="for first N years" value={plan.vacationYears} onChange={(n) => update('vacationYears', n)} suffix="yr" integer />
-              <Field label="Effective tax rate" value={plan.taxRatePct} onChange={(n) => update('taxRatePct', n)} suffix="%" span />
+              <Field label="Effective tax rate" value={plan.taxRatePct} onChange={(n) => update('taxRatePct', n)} suffix="%" step={0.1} span />
             </div>
           </div>
 
           <div style={panel}>
             <div style={groupTitle}>Guaranteed income</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Social Security /yr" value={plan.socialSecurityAnnual} onChange={(n) => update('socialSecurityAnnual', n)} prefix="$" />
+              <Field label="Social Security /yr" value={plan.socialSecurityAnnual} onChange={(n) => update('socialSecurityAnnual', n)} prefix="$" step={1000} />
               <Field label="SS starts at age" value={plan.ssStartAge} onChange={(n) => update('ssStartAge', n)} integer />
-              <Field label="Pension /yr" value={plan.pensionAnnual} onChange={(n) => update('pensionAnnual', n)} prefix="$" />
+              <Field label="Pension /yr" value={plan.pensionAnnual} onChange={(n) => update('pensionAnnual', n)} prefix="$" step={1000} />
               <Field label="Pension starts at age" value={plan.pensionStartAge} onChange={(n) => update('pensionStartAge', n)} integer />
             </div>
           </div>
