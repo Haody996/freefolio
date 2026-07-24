@@ -2,7 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from './prisma'
 
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-001']
+// Newest stable flash first, with fallbacks. gemini-3.6-flash is ~2× faster and
+// higher quality than 2.5-flash on this workload (benchmarked 2026-07-24).
+const MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']
 
 // One insight per user per UTC day, cached in-memory.
 const cache = new Map<string, { date: string; text: string }>()
