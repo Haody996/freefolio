@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import api from '../../lib/api'
-import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO } from '../../lib/portfolio'
-import type { Category, Holding } from '../../lib/portfolio'
+import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO, ACCOUNT_TYPES, accountTreatment, TREATMENTS } from '../../lib/portfolio'
+import type { Category, AccountType, Holding } from '../../lib/portfolio'
 
 export interface Draft {
   symbol: string
   name: string
   category: Category
+  accountType: AccountType
   quantity: string
   price: string
   prevClose: string
@@ -16,17 +17,19 @@ export interface SavePayload {
   symbol: string
   name: string
   category: Category
+  accountType: AccountType
   quantity: number
   price: number
   prevClose: number
 }
 
 function toDraft(h: Holding | null): Draft {
-  if (!h) return { symbol: '', name: '', category: 'STOCKS', quantity: '', price: '', prevClose: '' }
+  if (!h) return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', quantity: '', price: '', prevClose: '' }
   return {
     symbol: h.symbol,
     name: h.name,
     category: h.category,
+    accountType: h.accountType,
     quantity: String(h.quantity),
     price: String(h.price),
     prevClose: String(h.prevClose),
@@ -68,9 +71,12 @@ export default function HoldingModal({
   const isEdit = !!editing
   const [draft, setDraft] = useState<Draft>(toDraft(editing))
 
-  // In add mode, warn when the ticker already exists — saving will combine quantities.
+  // In add mode, warn when the same ticker + account already exists — saving
+  // combines quantities (same ticker in a different account stays separate).
   const dup = !isEdit
-    ? existing.find((h) => h.symbol === draft.symbol.toUpperCase().trim())
+    ? existing.find(
+        (h) => h.symbol === draft.symbol.toUpperCase().trim() && h.accountType === draft.accountType
+      )
     : undefined
   const addQty = parseFloat(draft.quantity) || 0
   const [syncing, setSyncing] = useState(false)
@@ -120,6 +126,7 @@ export default function HoldingModal({
       symbol,
       name: draft.name.trim() || symbol,
       category: draft.category,
+      accountType: draft.accountType,
       quantity: parseFloat(draft.quantity) || 0,
       price,
       prevClose: draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price,
@@ -205,6 +212,31 @@ export default function HoldingModal({
             </div>
           </div>
 
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={labelStyle}>Account</label>
+            <select
+              value={draft.accountType}
+              onChange={(e) => set('accountType', e.target.value as AccountType)}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+              {ACCOUNT_TYPES.map((a) => (
+                <option key={a.value} value={a.value} style={{ background: '#16181F' }}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            {(() => {
+              const t = TREATMENTS.find((x) => x.value === accountTreatment(draft.accountType))!
+              return (
+                <span style={{ fontSize: 12, color: '#8A90A2' }}>
+                  Tax treatment: <span style={{ color: t.color, fontWeight: 700 }}>{t.label}</span>
+                  {t.value === 'PRE_TAX' && ' — taxed on withdrawal'}
+                  {t.value === 'ROTH' && ' — grows tax-free'}
+                </span>
+              )
+            })()}
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={labelStyle}>Ticker</label>
@@ -285,8 +317,9 @@ export default function HoldingModal({
                 lineHeight: 1.45,
               }}
             >
-              You already hold <b>{dup.symbol}</b> ({dup.quantity} sh). Saving will{' '}
-              <b>combine</b> them into <b>{dup.quantity + addQty} sh</b> — the existing position won't be replaced.
+              You already hold <b>{dup.symbol}</b> ({dup.quantity}) in your{' '}
+              <b>{ACCOUNT_TYPES.find((a) => a.value === dup.accountType)?.short}</b> account. Saving will{' '}
+              <b>combine</b> them into <b>{dup.quantity + addQty}</b> — the existing position won't be replaced.
             </div>
           )}
 

@@ -26,6 +26,8 @@ import {
   mask,
   catColor,
   CAT_LABEL,
+  accountLabel,
+  computeTaxBreakdown,
 } from '../lib/portfolio'
 import type { Holding, ProjectionInput } from '../lib/portfolio'
 
@@ -174,6 +176,7 @@ export default function Dashboard() {
 
   // ─── Derived ───────────────────────────────────────────────────────
   const alloc = computeAllocation(totals)
+  const taxBreakdown = computeTaxBreakdown(holdings)
 
   // History: use backend snapshots (pinning the last point to the live total),
   // falling back to a seeded walk when there isn't enough real history yet.
@@ -313,6 +316,34 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* Tax treatment breakdown */}
+        {taxBreakdown.length > 0 && (
+          <section style={panel}>
+            <div style={panelTitle}>By tax treatment</div>
+            {/* Stacked proportion bar */}
+            <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', gap: 2 }}>
+              {taxBreakdown.map((t) => (
+                <div key={t.treatment} style={{ width: `${t.pct * 100}%`, background: t.color }} title={`${t.label} ${pct(t.pct)}`} />
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${taxBreakdown.length}, 1fr)`, gap: 14, marginTop: 16 }}>
+              {taxBreakdown.map((t) => (
+                <div key={t.treatment} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: t.color, flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: '#8A90A2', fontWeight: 600 }}>
+                      {t.label} · {pct(t.pct)}
+                    </div>
+                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {mask(fmtUSD(t.value), privacy)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Holdings */}
         <section style={panel}>
           <div style={panelTitle}>Holdings</div>
@@ -349,7 +380,14 @@ export default function Dashboard() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     {badge}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{h.symbol}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>
+                      {h.symbol}
+                      {h.accountType !== 'TAXABLE' && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#8A90A2', background: 'rgba(255,255,255,0.06)', borderRadius: 5, padding: '1px 5px' }}>
+                          {accountLabel(h.accountType)}
+                        </span>
+                      )}
+                    </div>
                       <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {fmtUSD(h.price, 2)} · {shares}
                       </div>
@@ -375,7 +413,14 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {badge}
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{h.symbol}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>
+                      {h.symbol}
+                      {h.accountType !== 'TAXABLE' && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#8A90A2', background: 'rgba(255,255,255,0.06)', borderRadius: 5, padding: '1px 5px' }}>
+                          {accountLabel(h.accountType)}
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
                   </div>
                 </div>

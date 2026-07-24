@@ -2,16 +2,30 @@ import { Router, Response } from 'express'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
 import prisma from '../lib/prisma'
 import { getQuote } from '../lib/prices'
-import { Category } from '@prisma/client'
+import { Category, AccountType } from '@prisma/client'
 
 const router = Router()
 router.use(authMiddleware)
 
 const CATEGORIES: Category[] = ['STOCKS', 'CRYPTO', 'CASH', 'BONDS', 'OTHER']
+const ACCOUNT_TYPES: AccountType[] = [
+  'TAXABLE',
+  'TRADITIONAL_401K',
+  'ROTH_401K',
+  'TRADITIONAL_IRA',
+  'ROTH_IRA',
+  'HSA',
+  'OTHER',
+]
 
 function normCategory(c: unknown): Category {
   const up = String(c || '').toUpperCase()
   return (CATEGORIES as string[]).includes(up) ? (up as Category) : 'STOCKS'
+}
+
+function normAccountType(a: unknown): AccountType {
+  const up = String(a || '').toUpperCase()
+  return (ACCOUNT_TYPES as string[]).includes(up) ? (up as AccountType) : 'TAXABLE'
 }
 
 // Map a holding category to the price provider's asset routing.
@@ -34,7 +48,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // the new quantity is added to the existing position (price/prev refreshed to
 // the incoming values) rather than overwriting it.
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { symbol, name, category, quantity, price, prevClose } = req.body
+  const { symbol, name, category, accountType, quantity, price, prevClose } = req.body
   const sym = String(symbol || '').toUpperCase().trim()
   if (!sym) {
     res.status(400).json({ error: 'symbol is required' })
@@ -45,9 +59,12 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const pc = prevClose != null && !isNaN(Number(prevClose)) ? Number(prevClose) : p
   const qty = Number(quantity) || 0
   const cat = normCategory(category)
+  const acct = normAccountType(accountType)
 
+  // A ticker only combines within the same account; the same ticker in a
+  // different account is a separate position.
   const existing = await prisma.holding.findUnique({
-    where: { userId_symbol: { userId: req.userId!, symbol: sym } },
+    where: { userId_symbol_accountType: { userId: req.userId!, symbol: sym, accountType: acct } },
   })
 
   if (existing) {
@@ -71,6 +88,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       symbol: sym,
       name: String(name || '').trim() || sym,
       category: cat,
+      accountType: acct,
       quantity: qty,
       price: p,
       prevClose: pc,
@@ -88,7 +106,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(404).json({ error: 'Holding not found' })
     return
   }
-  const { symbol, name, category, quantity, price, prevClose } = req.body
+  const { symbol, name, category, accountType, quantity, price, prevClose } = req.body
   const p = price != null ? Number(price) : existing.price
   const holding = await prisma.holding.update({
     where: { id: existing.id },
@@ -96,6 +114,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       symbol: symbol != null ? String(symbol).toUpperCase().trim() : undefined,
       name: name != null ? String(name).trim() : undefined,
       category: category != null ? normCategory(category) : undefined,
+      accountType: accountType != null ? normAccountType(accountType) : undefined,
       quantity: quantity != null ? Number(quantity) : undefined,
       price: price != null ? p : undefined,
       prevClose: prevClose != null ? Number(prevClose) : undefined,

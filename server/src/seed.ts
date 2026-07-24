@@ -1,26 +1,27 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import prisma from './lib/prisma'
-import { Category } from '@prisma/client'
+import { Category, AccountType } from '@prisma/client'
 
-// The design's seed holdings.
+// The design's seed holdings, spread across a few account types.
 const SEED_HOLDINGS: {
   symbol: string
   name: string
   category: Category
+  accountType: AccountType
   quantity: number
   price: number
   prevClose: number
 }[] = [
-  { symbol: 'NVDA', name: 'NVIDIA Corp', category: 'STOCKS', quantity: 60, price: 178.3, prevClose: 171.2 },
-  { symbol: 'AAPL', name: 'Apple Inc', category: 'STOCKS', quantity: 40, price: 244.1, prevClose: 246.5 },
-  { symbol: 'VTI', name: 'Vanguard Total Market', category: 'STOCKS', quantity: 18, price: 315.2, prevClose: 312.8 },
-  { symbol: 'VXUS', name: 'Vanguard Intl Stock', category: 'STOCKS', quantity: 50, price: 72.4, prevClose: 71.9 },
-  { symbol: 'BTC', name: 'Bitcoin', category: 'CRYPTO', quantity: 0.85, price: 118400, prevClose: 119000 },
-  { symbol: 'ETH', name: 'Ethereum', category: 'CRYPTO', quantity: 6.2, price: 4120, prevClose: 3980 },
-  { symbol: 'BND', name: 'Vanguard Total Bond', category: 'BONDS', quantity: 60, price: 71.8, prevClose: 71.6 },
-  { symbol: 'CASH', name: 'HYSA · Ally Bank', category: 'CASH', quantity: 1, price: 14250, prevClose: 14250 },
-  { symbol: 'RSU', name: 'Vested RSUs (manual)', category: 'OTHER', quantity: 1, price: 8600, prevClose: 8600 },
+  { symbol: 'NVDA', name: 'NVIDIA Corp', category: 'STOCKS', accountType: 'TAXABLE', quantity: 60, price: 178.3, prevClose: 171.2 },
+  { symbol: 'AAPL', name: 'Apple Inc', category: 'STOCKS', accountType: 'TAXABLE', quantity: 40, price: 244.1, prevClose: 246.5 },
+  { symbol: 'VTI', name: 'Vanguard Total Market', category: 'STOCKS', accountType: 'TRADITIONAL_401K', quantity: 18, price: 315.2, prevClose: 312.8 },
+  { symbol: 'VXUS', name: 'Vanguard Intl Stock', category: 'STOCKS', accountType: 'ROTH_IRA', quantity: 50, price: 72.4, prevClose: 71.9 },
+  { symbol: 'BTC', name: 'Bitcoin', category: 'CRYPTO', accountType: 'TAXABLE', quantity: 0.85, price: 118400, prevClose: 119000 },
+  { symbol: 'ETH', name: 'Ethereum', category: 'CRYPTO', accountType: 'TAXABLE', quantity: 6.2, price: 4120, prevClose: 3980 },
+  { symbol: 'BND', name: 'Vanguard Total Bond', category: 'BONDS', accountType: 'TRADITIONAL_IRA', quantity: 60, price: 71.8, prevClose: 71.6 },
+  { symbol: 'CASH', name: 'HYSA · Ally Bank', category: 'CASH', accountType: 'TAXABLE', quantity: 1, price: 14250, prevClose: 14250 },
+  { symbol: 'RSU', name: 'Vested RSUs (manual)', category: 'OTHER', accountType: 'TAXABLE', quantity: 1, price: 8600, prevClose: 8600 },
 ]
 
 // Seeded random walk (matches the prototype) rescaled so the last point equals

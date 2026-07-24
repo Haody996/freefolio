@@ -3,14 +3,71 @@
 
 export type Category = 'STOCKS' | 'CRYPTO' | 'CASH' | 'BONDS' | 'OTHER'
 
+export type AccountType =
+  | 'TAXABLE'
+  | 'TRADITIONAL_401K'
+  | 'ROTH_401K'
+  | 'TRADITIONAL_IRA'
+  | 'ROTH_IRA'
+  | 'HSA'
+  | 'OTHER'
+
+// Tax treatment buckets: PRE_TAX = tax-deferred (taxed on withdrawal),
+// ROTH = post-tax contributions, tax-free growth, TAXABLE = brokerage.
+export type TaxTreatment = 'PRE_TAX' | 'ROTH' | 'TAXABLE'
+
+export const ACCOUNT_TYPES: { value: AccountType; label: string; short: string; treatment: TaxTreatment }[] = [
+  { value: 'TAXABLE', label: 'Taxable / Brokerage', short: 'Taxable', treatment: 'TAXABLE' },
+  { value: 'TRADITIONAL_401K', label: 'Traditional 401(k)', short: '401(k)', treatment: 'PRE_TAX' },
+  { value: 'ROTH_401K', label: 'Roth 401(k)', short: 'Roth 401(k)', treatment: 'ROTH' },
+  { value: 'TRADITIONAL_IRA', label: 'Traditional IRA', short: 'Trad IRA', treatment: 'PRE_TAX' },
+  { value: 'ROTH_IRA', label: 'Roth IRA', short: 'Roth IRA', treatment: 'ROTH' },
+  { value: 'HSA', label: 'HSA', short: 'HSA', treatment: 'PRE_TAX' },
+  { value: 'OTHER', label: 'Other', short: 'Other', treatment: 'TAXABLE' },
+]
+
+const ACCOUNT_BY_VALUE = new Map(ACCOUNT_TYPES.map((a) => [a.value, a]))
+export function accountLabel(a: AccountType): string {
+  return ACCOUNT_BY_VALUE.get(a)?.short ?? 'Taxable'
+}
+export function accountTreatment(a: AccountType): TaxTreatment {
+  return ACCOUNT_BY_VALUE.get(a)?.treatment ?? 'TAXABLE'
+}
+
+export const TREATMENTS: { value: TaxTreatment; label: string; color: string }[] = [
+  { value: 'PRE_TAX', label: 'Pre-tax', color: '#FFB020' },
+  { value: 'ROTH', label: 'Roth (tax-free)', color: '#22E38A' },
+  { value: 'TAXABLE', label: 'Taxable', color: '#35A0FF' },
+]
+
 export interface Holding {
   id: string
   symbol: string
   name: string
   category: Category
+  accountType: AccountType
   quantity: number
   price: number
   prevClose: number
+}
+
+export interface TreatmentSegment {
+  treatment: TaxTreatment
+  label: string
+  color: string
+  value: number
+  pct: number
+}
+
+// Total value grouped by tax treatment (pre-tax / Roth / taxable).
+export function computeTaxBreakdown(holdings: Holding[]): TreatmentSegment[] {
+  const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
+  return TREATMENTS.map((t) => {
+    const value = holdings
+      .filter((h) => accountTreatment(h.accountType) === t.value)
+      .reduce((s, h) => s + h.quantity * h.price, 0)
+    return { treatment: t.value, label: t.label, color: t.color, value, pct: total ? value / total : 0 }
+  }).filter((s) => s.value > 0)
 }
 
 export interface EnrichedHolding extends Holding {

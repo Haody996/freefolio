@@ -43,20 +43,35 @@ enum Category {
   OTHER
 }
 
-model Holding {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  symbol    String
-  name      String
-  category  Category @default(STOCKS)
-  quantity  Float    @default(0)
-  price     Float    @default(0)
-  prevClose Float    @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// The account a holding lives in. Determines its tax treatment (see client
+// portfolio.ts for the account → pre-tax / Roth / taxable mapping).
+enum AccountType {
+  TAXABLE
+  TRADITIONAL_401K
+  ROTH_401K
+  TRADITIONAL_IRA
+  ROTH_IRA
+  HSA
+  OTHER
+}
 
-  @@unique([userId, symbol])
+model Holding {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String
+  name        String
+  category    Category    @default(STOCKS)
+  accountType AccountType @default(TAXABLE)
+  quantity    Float       @default(0)
+  price       Float       @default(0)
+  prevClose   Float       @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Same ticker can live in different accounts (e.g. VTI in taxable + Roth IRA),
+  // so uniqueness is per account.
+  @@unique([userId, symbol, accountType])
   @@index([userId])
   @@index([symbol])
 }
