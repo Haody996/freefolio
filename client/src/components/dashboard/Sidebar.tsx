@@ -1,7 +1,11 @@
+import { NavLink } from 'react-router-dom'
 import { fmtCompact, pct } from '../../lib/portfolio'
 import { useIsMobile } from '../../lib/useIsMobile'
 
-const NAV = ['Dashboard', 'Holdings', 'Projections', 'Transactions', 'Settings']
+const NAV: { label: string; to: string }[] = [
+  { label: 'Dashboard', to: '/' },
+  { label: 'Retirement', to: '/retirement' },
+]
 const FIRE_GOAL = 1_500_000
 
 function Logo() {
@@ -13,6 +17,19 @@ function Logo() {
       <span style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 19, letterSpacing: -0.5 }}>getfreefolio</span>
     </div>
   )
+}
+
+function navStyle(isActive: boolean, horizontal = false): React.CSSProperties {
+  return {
+    padding: horizontal ? '7px 12px' : '10px 12px',
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: isActive ? 700 : 600,
+    background: isActive ? 'rgba(34,227,138,0.12)' : 'transparent',
+    color: isActive ? '#22E38A' : '#8A90A2',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  }
 }
 
 function logoutBtn(onLogout: () => void, full: boolean): React.ReactNode {
@@ -56,22 +73,21 @@ function FireProgress({ netWorth }: { netWorth: number }) {
 export default function Sidebar({ netWorth, onLogout }: { netWorth: number; onLogout: () => void }) {
   const isMobile = useIsMobile()
 
-  // Mobile: a compact top bar — logo + logout, with a slim FIRE progress bar below.
+  // Mobile: compact top bar — logo + logout, a horizontal nav, then FIRE bar.
   if (isMobile) {
     return (
-      <header
-        style={{
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+      <header style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Logo />
           {logoutBtn(onLogout, false)}
         </div>
+        <nav style={{ display: 'flex', gap: 6 }}>
+          {NAV.map(({ label, to }) => (
+            <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => navStyle(isActive, true)}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
         <FireProgress netWorth={netWorth} />
       </header>
     )
@@ -96,25 +112,11 @@ export default function Sidebar({ netWorth, onLogout }: { netWorth: number; onLo
       <Logo />
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {NAV.map((item, i) => {
-          const active = i === 0
-          return (
-            <div
-              key={item}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: active ? 700 : 600,
-                background: active ? 'rgba(34,227,138,0.12)' : 'transparent',
-                color: active ? '#22E38A' : '#8A90A2',
-                cursor: 'pointer',
-              }}
-            >
-              {item}
-            </div>
-          )
-        })}
+        {NAV.map(({ label, to }) => (
+          <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => navStyle(isActive)}>
+            {label}
+          </NavLink>
+        ))}
       </nav>
 
       <div style={{ marginTop: 'auto', background: '#16181F', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 16 }}>

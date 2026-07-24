@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { isAuthenticated } from './lib/auth'
+import Shell from './components/dashboard/Shell'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import Retirement from './pages/Retirement'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,14 +25,19 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
           <Route
             path="/"
             element={
               <PrivateRoute>
-                <Dashboard />
+                <Shell />
               </PrivateRoute>
             }
-          />
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="retirement" element={<Retirement />} />
+          </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

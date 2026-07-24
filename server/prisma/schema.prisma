@@ -97,14 +97,33 @@ model NetWorthSnapshot {
 // null → default to the user's current net worth.
 
 model ProjectionSettings {
-  id                 String @id @default(cuid())
-  userId             String @unique
-  user               User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startingCapital    Float?
-  monthlyContribution Float @default(3000)
-  expectedReturnPct  Float  @default(8)
-  years              Int    @default(25)
-  inflationPct       Float  @default(3)
+  id                  String @id @default(cuid())
+  userId              String @unique
+  user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Savings / growth
+  startingCapital     Float? // null → default to current net worth
+  monthlyContribution Float  @default(3000)
+  expectedReturnPct   Float  @default(8)
+  inflationPct        Float  @default(3)
+  years               Int    @default(25) // legacy (unused by the retirement sim)
+
+  // Ages
+  currentAge          Int    @default(30)
+  retirementAge       Int    @default(55)
+  endAge              Int    @default(95) // plan-to age
+
+  // Retirement spending (today's dollars)
+  annualSpending      Float  @default(60000)
+  vacationBudget      Float  @default(12000) // extra annual spend early in retirement
+  vacationYears       Int    @default(10)
+  taxRatePct          Float  @default(15)
+
+  // Guaranteed income
+  socialSecurityAnnual Float @default(24000)
+  ssStartAge           Int   @default(67)
+  pensionAnnual        Float @default(0)
+  pensionStartAge      Int   @default(65)
 
   updatedAt DateTime @updatedAt
 }

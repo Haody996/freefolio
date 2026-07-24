@@ -5,7 +5,34 @@ import prisma from '../lib/prisma'
 const router = Router()
 router.use(authMiddleware)
 
-// GET /api/projection — the saved compound-growth slider settings.
+// Numeric fields the client may persist. startingCapital is nullable (null =
+// follow current net worth); the rest are plain numbers.
+const NUM_FIELDS = [
+  'monthlyContribution',
+  'expectedReturnPct',
+  'inflationPct',
+  'currentAge',
+  'retirementAge',
+  'endAge',
+  'annualSpending',
+  'vacationBudget',
+  'vacationYears',
+  'taxRatePct',
+  'socialSecurityAnnual',
+  'ssStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
+] as const
+const INT_FIELDS = new Set([
+  'currentAge',
+  'retirementAge',
+  'endAge',
+  'vacationYears',
+  'ssStartAge',
+  'pensionStartAge',
+])
+
+// GET /api/projection — the saved retirement-plan settings.
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   let settings = await prisma.projectionSettings.findUnique({ where: { userId: req.userId } })
   if (!settings) {
@@ -14,20 +41,18 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   res.json({ settings })
 })
 
-// PUT /api/projection — persist slider positions.
+// PUT /api/projection — persist plan inputs.
 router.put('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { startingCapital, monthlyContribution, expectedReturnPct, years, inflationPct } = req.body
+  const data: Record<string, number | null> = {}
 
-  const data = {
-    startingCapital:
-      startingCapital === null || startingCapital === undefined
-        ? undefined
-        : Number(startingCapital),
-    monthlyContribution:
-      monthlyContribution != null ? Number(monthlyContribution) : undefined,
-    expectedReturnPct: expectedReturnPct != null ? Number(expectedReturnPct) : undefined,
-    years: years != null ? Math.round(Number(years)) : undefined,
-    inflationPct: inflationPct != null ? Number(inflationPct) : undefined,
+  if ('startingCapital' in req.body) {
+    const v = req.body.startingCapital
+    data.startingCapital = v === null || v === undefined ? null : Number(v)
+  }
+  for (const f of NUM_FIELDS) {
+    if (req.body[f] != null && !isNaN(Number(req.body[f]))) {
+      data[f] = INT_FIELDS.has(f) ? Math.round(Number(req.body[f])) : Number(req.body[f])
+    }
   }
 
   const settings = await prisma.projectionSettings.upsert({
