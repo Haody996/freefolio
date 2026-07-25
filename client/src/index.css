@@ -125,6 +125,6 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   animation: emoji-flicker 0.5s steps(2, end) infinite alternate;
 }
 @keyframes emoji-flicker {
-  0%   { transform: translateY(-50%) scale(2.2); filter: brightness(1) drop-shadow(0 0 3px rgba(255,120,0,0.9)); }
-  100% { transform: translateY(-52%) scale(2.5); filter: brightness(1.3) drop-shadow(0 0 5px rgba(255,190,40,1)); }
+  0%   { transform: translateY(-50%) scale(3.4); filter: brightness(1) drop-shadow(0 0 4px rgba(255,120,0,0.9)); }
+  100% { transform: translateY(-53%) scale(3.9); filter: brightness(1.3) drop-shadow(0 0 7px rgba(255,190,40,1)); }
 }
