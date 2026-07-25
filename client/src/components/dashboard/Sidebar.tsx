@@ -80,24 +80,28 @@ function FireProgress({ netWorth, fireGoal, projectedGoal, goalIsCustom, onSetGo
 
   return (
     <>
-      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS {full && '🔥'}</div>
+      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS</div>
       <div style={{ position: 'relative', margin: '10px 0 8px' }}>
         <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
           <div
-            className={full ? 'fire-blaze' : undefined}
+            className={full ? 'fire-blaze' : t > 0 ? 'fire-live' : undefined}
             style={{
+              position: 'relative',
               height: '100%',
               borderRadius: 8,
               width: `${progress.toFixed(1)}%`,
               minWidth: t > 0 ? 6 : 0,
+              overflow: 'hidden',
               background: full ? undefined : fillBg,
               boxShadow: full ? undefined : glow,
               transition: 'width .3s ease',
             }}
-          />
+          >
+            {!full && t > 0 && <span className="fire-sheen" />}
+          </div>
         </div>
         {full && (
-          <span className="fire-emoji-pix" style={{ position: 'absolute', right: -2, top: '50%', transformOrigin: 'right center' }} aria-hidden>
+          <span className="fire-emoji-pix" style={{ position: 'absolute', right: -6, top: '50%', transformOrigin: 'right center' }} aria-hidden>
             🔥
           </span>
         )}
