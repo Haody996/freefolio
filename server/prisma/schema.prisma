@@ -64,6 +64,12 @@ enum AutoFrequency {
   MONTHLY
 }
 
+// Retirement drawdown strategy.
+enum WithdrawalStrategy {
+  FIXED
+  GUARDRAILS
+}
+
 model Holding {
   id          String      @id @default(cuid())
   userId      String
@@ -136,11 +142,22 @@ model ProjectionSettings {
   vacationYears       Int    @default(10)
   taxRatePct          Float  @default(15)
 
-  // Guaranteed income
+  // Guaranteed income (socialSecurityAnnual = benefit at full retirement age 67)
   socialSecurityAnnual Float @default(24000)
   ssStartAge           Int   @default(67)
   pensionAnnual        Float @default(0)
   pensionStartAge      Int   @default(65)
+
+  // Strategy & fees
+  aumFeePct          Float             @default(0)     // advisory / fund fee, reduces return
+  withdrawalStrategy WithdrawalStrategy @default(FIXED) // FIXED vs Guyton-Klinger GUARDRAILS
+  spendingSmile      Boolean           @default(false) // real spending declines through retirement
+  applyRmd           Boolean           @default(true)  // required minimum distributions at 73+
+  healthcareAnnual       Float @default(6000) // separate expense line
+  healthcareInflationPct Float @default(5)     // grows faster than general inflation
+
+  // FIRE goal for the sidebar progress bar (null → default to projected nest egg)
+  fireGoal Float?
 
   updatedAt DateTime @updatedAt
 }

@@ -8,17 +8,19 @@ import FanChart from '../components/dashboard/FanChart'
 import YearBars from '../components/dashboard/YearBars'
 import EditableNumber from '../components/dashboard/EditableNumber'
 import NumberInput from '../components/dashboard/NumberInput'
-import { computeTotals, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
+import { computeTotals, computeTaxBreakdown, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
-import { simulateRetirement, backtestRetirement } from '../lib/retirement'
+import { simulateRetirement, backtestRetirement, ssClaimFactor } from '../lib/retirement'
 import type { RetirementInput } from '../lib/retirement'
 
-type Plan = RetirementInput
+// Bucket split (preTaxPct/rothPct) is derived from holdings, not persisted.
+type Plan = Omit<RetirementInput, 'preTaxPct' | 'rothPct'>
 
-const FIELDS: (keyof Plan)[] = [
+const NUM_FIELDS: (keyof Plan)[] = [
   'startingCapital', 'monthlyContribution', 'expectedReturnPct', 'inflationPct',
   'currentAge', 'retirementAge', 'endAge', 'annualSpending', 'vacationBudget',
   'vacationYears', 'taxRatePct', 'socialSecurityAnnual', 'ssStartAge', 'pensionAnnual', 'pensionStartAge',
+  'aumFeePct', 'healthcareAnnual', 'healthcareInflationPct',
 ]
 
 const panel: React.CSSProperties = {
@@ -55,6 +57,40 @@ function Field({
   )
 }
 
+function Toggle({ label, checked, onChange, span }: { label: string; checked: boolean; onChange: (v: boolean) => void; span?: boolean }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer', gridColumn: span ? '1 / -1' : undefined }}>
+      <span style={{ fontSize: 13, color: '#C9CDD8', fontWeight: 600 }}>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, background: checked ? '#22E38A' : 'rgba(255,255,255,0.14)', transition: 'background .15s', display: 'flex', justifyContent: checked ? 'flex-end' : 'flex-start' }}
+      >
+        <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff' }} />
+      </button>
+    </label>
+  )
+}
+
+function SelectField<T extends string>({ label, value, options, onChange, span }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; span?: boolean }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: span ? '1 / -1' : undefined }}>
+      <span style={{ fontSize: 12, color: '#8A90A2', fontWeight: 600 }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '10px 11px', color: '#F2F4F8', fontSize: 14, fontFamily: 'inherit', cursor: 'pointer' }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value} style={{ background: '#16181F' }}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function StatCard({ label, value, sub, color, accent }: { label: string; value: string; sub?: string; color?: string; accent?: boolean }) {
   return (
     <div
@@ -84,7 +120,7 @@ export default function Retirement() {
     queryKey: ['holdings'],
     queryFn: async () => (await api.get('/holdings')).data,
   })
-  const settingsQ = useQuery<{ settings: Record<string, number | null> }>({
+  const settingsQ = useQuery<{ settings: Record<string, number | string | boolean | null> }>({
     queryKey: ['projection'],
     queryFn: async () => (await api.get('/projection')).data,
   })
@@ -95,17 +131,20 @@ export default function Retirement() {
   const settings = settingsQ.data?.settings
   useEffect(() => {
     if (settings && !plan) {
-      const s = settings as Record<string, number | null>
+      const s = settings
       const seeded = {} as Plan
-      for (const f of FIELDS) seeded[f] = Number(s[f] ?? 0)
+      for (const f of NUM_FIELDS) (seeded as Record<string, unknown>)[f] = Number(s[f] ?? 0)
       if (s.startingCapital == null) seeded.startingCapital = Math.round(netWorth)
+      seeded.withdrawalStrategy = s.withdrawalStrategy === 'GUARDRAILS' ? 'GUARDRAILS' : 'FIXED'
+      seeded.spendingSmile = s.spendingSmile === true
+      seeded.applyRmd = s.applyRmd !== false
       setPlan(seeded)
     }
   }, [settings, plan, netWorth])
 
   // Persist plan changes (debounced).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function update(field: keyof Plan, value: number) {
+  function update<K extends keyof Plan>(field: K, value: Plan[K]) {
     setPlan((prev) => {
       if (!prev) return prev
       const next = { ...prev, [field]: value }
@@ -123,13 +162,22 @@ export default function Retirement() {
     )
   }
 
-  const result = simulateRetirement(plan)
+  // Withdrawal buckets are derived from the user's holdings (pre-tax / Roth / taxable).
+  const holdings = holdingsQ.data?.holdings ?? []
+  const breakdown = computeTaxBreakdown(holdings)
+  const preTaxPct = holdings.length ? breakdown.find((b) => b.treatment === 'PRE_TAX')?.pct ?? 0 : 0.5
+  const rothPct = holdings.length ? breakdown.find((b) => b.treatment === 'ROTH')?.pct ?? 0 : 0.2
+  const taxablePct = Math.max(0, 1 - preTaxPct - rothPct)
+  const simInput: RetirementInput = { ...plan, preTaxPct, rothPct }
+
+  const result = simulateRetirement(simInput)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
+  const adjustedSS = plan.socialSecurityAnnual * ssClaimFactor(plan.ssStartAge)
 
   // Retirement analysis: stress-test the drawdown from an (editable) starting
   // nest egg, defaulting to the projected balance at retirement.
   const effectiveNestEgg = nestEgg ?? Math.round(result.balanceAtRetirement)
-  const analysisPlan: Plan = { ...plan, currentAge: plan.retirementAge, startingCapital: effectiveNestEgg, monthlyContribution: 0 }
+  const analysisPlan: RetirementInput = { ...simInput, currentAge: plan.retirementAge, startingCapital: effectiveNestEgg, monthlyContribution: 0 }
   const analysis = simulateRetirement(analysisPlan)
   const backtest = backtestRetirement(analysisPlan)
 
@@ -204,17 +252,46 @@ export default function Retirement() {
               <Field label="Annual spending" value={plan.annualSpending} onChange={(n) => update('annualSpending', n)} prefix="$" step={1000} span />
               <Field label="Vacation budget" value={plan.vacationBudget} onChange={(n) => update('vacationBudget', n)} prefix="$" step={500} />
               <Field label="for first N years" value={plan.vacationYears} onChange={(n) => update('vacationYears', n)} suffix="yr" integer />
+              <Field label="Healthcare / yr" value={plan.healthcareAnnual} onChange={(n) => update('healthcareAnnual', n)} prefix="$" step={500} />
+              <Field label="Healthcare inflation" value={plan.healthcareInflationPct} onChange={(n) => update('healthcareInflationPct', n)} suffix="%" step={0.1} />
               <Field label="Effective tax rate" value={plan.taxRatePct} onChange={(n) => update('taxRatePct', n)} suffix="%" step={0.1} span />
+            </div>
+          </div>
+
+          <div style={panel}>
+            <div style={groupTitle}>Strategy &amp; fees</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Advisory / fund fees" value={plan.aumFeePct} onChange={(n) => update('aumFeePct', n)} suffix="%" step={0.1} />
+              <SelectField
+                label="Withdrawal strategy"
+                value={plan.withdrawalStrategy}
+                onChange={(v) => update('withdrawalStrategy', v)}
+                options={[{ value: 'FIXED', label: 'Fixed spending' }, { value: 'GUARDRAILS', label: 'Guardrails (flex)' }]}
+              />
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 12, marginTop: 2 }}>
+                <Toggle label="Spending smile (real spend declines with age)" checked={plan.spendingSmile} onChange={(v) => update('spendingSmile', v)} />
+                <Toggle label="Apply RMDs (required withdrawals at 73+)" checked={plan.applyRmd} onChange={(v) => update('applyRmd', v)} />
+              </div>
+              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#8A90A2', lineHeight: 1.5 }}>
+                Withdrawals draw <b style={{ color: '#35A0FF' }}>Taxable</b> → <b style={{ color: '#FFB020' }}>Pre-tax</b> → <b style={{ color: '#22E38A' }}>Roth</b>. Your mix:{' '}
+                {pct(preTaxPct)} pre-tax · {pct(rothPct)} Roth · {pct(taxablePct)} taxable.
+              </div>
             </div>
           </div>
 
           <div style={panel}>
             <div style={groupTitle}>Guaranteed income</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Social Security /yr" value={plan.socialSecurityAnnual} onChange={(n) => update('socialSecurityAnnual', n)} prefix="$" step={1000} />
-              <Field label="SS starts at age" value={plan.ssStartAge} onChange={(n) => update('ssStartAge', n)} integer />
+              <Field label="Social Security /yr (at 67)" value={plan.socialSecurityAnnual} onChange={(n) => update('socialSecurityAnnual', n)} prefix="$" step={1000} />
+              <Field label="SS claim age" value={plan.ssStartAge} onChange={(n) => update('ssStartAge', n)} integer />
               <Field label="Pension /yr" value={plan.pensionAnnual} onChange={(n) => update('pensionAnnual', n)} prefix="$" step={1000} />
               <Field label="Pension starts at age" value={plan.pensionStartAge} onChange={(n) => update('pensionStartAge', n)} integer />
+              {plan.ssStartAge !== 67 && (
+                <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#8A90A2' }}>
+                  Claiming at {plan.ssStartAge} → <b style={{ color: plan.ssStartAge > 67 ? '#22E38A' : '#FFB020' }}>{fmtUSD(Math.round(adjustedSS))}/yr</b>{' '}
+                  ({plan.ssStartAge > 67 ? '+' : ''}{Math.round((ssClaimFactor(plan.ssStartAge) - 1) * 100)}% vs. age 67).
+                </div>
+              )}
             </div>
           </div>
         </div>

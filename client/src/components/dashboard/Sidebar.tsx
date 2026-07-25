@@ -1,12 +1,19 @@
 import { NavLink } from 'react-router-dom'
 import { fmtCompact, pct } from '../../lib/portfolio'
 import { useIsMobile } from '../../lib/useIsMobile'
+import EditableNumber from './EditableNumber'
 
 const NAV: { label: string; to: string }[] = [
   { label: 'Dashboard', to: '/' },
   { label: 'Retirement', to: '/retirement' },
 ]
-const FIRE_GOAL = 1_500_000
+
+interface GoalProps {
+  fireGoal: number
+  projectedGoal: number
+  goalIsCustom: boolean
+  onSetGoal: (v: number | null) => void
+}
 
 function Logo() {
   return (
@@ -55,22 +62,33 @@ function logoutBtn(onLogout: () => void, full: boolean): React.ReactNode {
   )
 }
 
-function FireProgress({ netWorth }: { netWorth: number }) {
-  const progress = Math.min(100, (netWorth / FIRE_GOAL) * 100)
+function FireProgress({ netWorth, fireGoal, projectedGoal, goalIsCustom, onSetGoal }: { netWorth: number } & GoalProps) {
+  const goal = fireGoal > 0 ? fireGoal : 1
+  const progress = Math.min(100, (netWorth / goal) * 100)
   return (
     <>
       <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS</div>
       <div style={{ margin: '10px 0 8px', height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
         <div style={{ height: '100%', borderRadius: 8, background: 'linear-gradient(90deg,#22E38A,#9B7CFF)', width: `${progress.toFixed(1)}%` }} />
       </div>
-      <div style={{ fontSize: 12, color: '#8A90A2' }}>
-        <span style={{ color: '#F2F4F8', fontWeight: 700 }}>{fmtCompact(netWorth)}</span> / $1.5M · {pct(netWorth / FIRE_GOAL)}
+      <div style={{ fontSize: 12, color: '#8A90A2', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <span style={{ color: '#F2F4F8', fontWeight: 700 }}>{fmtCompact(netWorth)}</span> /
+        <EditableNumber value={Math.round(fireGoal)} format={(n) => fmtCompact(n)} min={1000} max={1_000_000_000} allowOverMax onCommit={(n) => onSetGoal(n)} />
+        · {pct(netWorth / goal)}
       </div>
+      {goalIsCustom && (
+        <button
+          onClick={() => onSetGoal(null)}
+          style={{ marginTop: 6, border: 'none', background: 'transparent', color: '#22E38A', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', padding: 0 }}
+        >
+          ↺ use projected ({fmtCompact(projectedGoal)})
+        </button>
+      )}
     </>
   )
 }
 
-export default function Sidebar({ netWorth, onLogout }: { netWorth: number; onLogout: () => void }) {
+export default function Sidebar({ netWorth, onLogout, ...goal }: { netWorth: number; onLogout: () => void } & GoalProps) {
   const isMobile = useIsMobile()
 
   // Mobile: compact top bar — logo + logout, a horizontal nav, then FIRE bar.
@@ -88,7 +106,7 @@ export default function Sidebar({ netWorth, onLogout }: { netWorth: number; onLo
             </NavLink>
           ))}
         </nav>
-        <FireProgress netWorth={netWorth} />
+        <FireProgress netWorth={netWorth} {...goal} />
       </header>
     )
   }
@@ -120,7 +138,7 @@ export default function Sidebar({ netWorth, onLogout }: { netWorth: number; onLo
       </nav>
 
       <div style={{ marginTop: 'auto', background: '#16181F', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 16 }}>
-        <FireProgress netWorth={netWorth} />
+        <FireProgress netWorth={netWorth} {...goal} />
         {logoutBtn(onLogout, true)}
       </div>
     </aside>
