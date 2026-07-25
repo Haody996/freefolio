@@ -12,6 +12,21 @@ function signToken(userId: string): string {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' })
 }
 
+// Emails listed in ADMIN_EMAILS (comma-separated) are auto-granted admin.
+function isAdminEmail(email: string): boolean {
+  const list = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+  return list.includes(email.toLowerCase())
+}
+
+// Promote a user to admin if their email is allow-listed. Returns effective isAdmin.
+async function ensureAdmin(userId: string, email: string, current: boolean): Promise<boolean> {
+  if (!current && isAdminEmail(email)) {
+    await prisma.user.update({ where: { id: userId }, data: { isAdmin: true } })
+    return true
+  }
+  return current
+}
+
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body
@@ -36,12 +51,13 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     data: {
       email,
       password: hashed,
+      isAdmin: isAdminEmail(email),
       profile: { create: { firstName: '', lastName: '' } },
       projection: { create: {} },
     },
   })
 
-  res.status(201).json({ token: signToken(user.id), user: { id: user.id, email: user.email } })
+  res.status(201).json({ token: signToken(user.id), user: { id: user.id, email: user.email, isAdmin: user.isAdmin } })
 })
 
 // POST /api/auth/login
@@ -65,9 +81,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
+  const isAdmin = await ensureAdmin(user.id, user.email, user.isAdmin)
   res.json({
     token: signToken(user.id),
-    user: { id: user.id, email: user.email, isAdmin: user.isAdmin },
+    user: { id: user.id, email: user.email, isAdmin },
   })
 })
 
@@ -90,7 +107,8 @@ router.get('/me', async (req: Request, res: Response): Promise<void> => {
       res.status(404).json({ error: 'User not found' })
       return
     }
-    res.json({ user })
+    const isAdmin = await ensureAdmin(user.id, user.email, user.isAdmin)
+    res.json({ user: { ...user, isAdmin } })
   } catch {
     res.status(401).json({ error: 'Invalid token' })
   }
@@ -138,9 +156,10 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
       })
     }
 
+    const isAdmin = await ensureAdmin(user.id, user.email, user.isAdmin)
     res.json({
       token: signToken(user.id),
-      user: { id: user.id, email: user.email, isAdmin: user.isAdmin },
+      user: { id: user.id, email: user.email, isAdmin },
     })
   } catch (err: any) {
     console.error('[google-auth] Verification failed:', String(err))

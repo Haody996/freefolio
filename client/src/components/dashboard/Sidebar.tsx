@@ -1,12 +1,16 @@
 import { NavLink } from 'react-router-dom'
 import { fmtCompact, pct } from '../../lib/portfolio'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { isAdmin } from '../../lib/auth'
 import EditableNumber from './EditableNumber'
 
-const NAV: { label: string; to: string }[] = [
+const BASE_NAV: { label: string; to: string }[] = [
   { label: 'Dashboard', to: '/' },
   { label: 'Retirement', to: '/retirement' },
 ]
+function navItems() {
+  return isAdmin() ? [...BASE_NAV, { label: 'Admin', to: '/admin' }] : BASE_NAV
+}
 
 interface GoalProps {
   fireGoal: number
@@ -64,12 +68,32 @@ function logoutBtn(onLogout: () => void, full: boolean): React.ReactNode {
 
 function FireProgress({ netWorth, fireGoal, projectedGoal, goalIsCustom, onSetGoal }: { netWorth: number } & GoalProps) {
   const goal = fireGoal > 0 ? fireGoal : 1
-  const progress = Math.min(100, (netWorth / goal) * 100)
+  const t = Math.max(0, Math.min(1, netWorth / goal))
+  const progress = t * 100
+  const full = t >= 0.999
+
+  // Heat: the leading edge shifts from ember-red → orange → gold as you near FIRE,
+  // and the glow intensifies. At 100% the whole bar blazes (animated in index.css).
+  const hot = `rgb(255, ${Math.round(69 + 141 * t)}, ${Math.round(63 * t)})`
+  const fillBg = `linear-gradient(90deg, #3d0800, #b31a00, ${hot})`
+  const glow = `0 0 ${Math.round(4 + 12 * t)}px rgba(255, ${Math.round(69 + 110 * t)}, 0, ${(0.25 + 0.5 * t).toFixed(2)})`
+
   return (
     <>
-      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS</div>
-      <div style={{ margin: '10px 0 8px', height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 8, background: 'linear-gradient(90deg,#22E38A,#9B7CFF)', width: `${progress.toFixed(1)}%` }} />
+      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS {full && '🔥'}</div>
+      <div style={{ margin: '10px 0 8px', height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+        <div
+          className={full ? 'fire-blaze' : undefined}
+          style={{
+            height: '100%',
+            borderRadius: 8,
+            width: `${progress.toFixed(1)}%`,
+            minWidth: t > 0 ? 6 : 0,
+            background: full ? undefined : fillBg,
+            boxShadow: full ? undefined : glow,
+            transition: 'width .3s ease',
+          }}
+        />
       </div>
       <div style={{ fontSize: 12, color: '#8A90A2', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
         <span style={{ color: '#F2F4F8', fontWeight: 700 }}>{fmtCompact(netWorth)}</span> /
@@ -100,7 +124,7 @@ export default function Sidebar({ netWorth, onLogout, ...goal }: { netWorth: num
           {logoutBtn(onLogout, false)}
         </div>
         <nav style={{ display: 'flex', gap: 6 }}>
-          {NAV.map(({ label, to }) => (
+          {navItems().map(({ label, to }) => (
             <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => navStyle(isActive, true)}>
               {label}
             </NavLink>
@@ -130,7 +154,7 @@ export default function Sidebar({ netWorth, onLogout, ...goal }: { netWorth: num
       <Logo />
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {NAV.map(({ label, to }) => (
+        {navItems().map(({ label, to }) => (
           <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => navStyle(isActive)}>
             {label}
           </NavLink>

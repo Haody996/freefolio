@@ -276,7 +276,7 @@ export default function Dashboard() {
           </div>
         )}
         {totals.en.map((h) => {
-          const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : `${h.quantity}`
+          const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : mask(`${h.quantity}`, privacy)
           const badge = (
             <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: catColor(h.category), color: '#04140C' }}>
               {h.symbol.slice(0, 4)}

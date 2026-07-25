@@ -9,6 +9,7 @@ import networthRoutes from './routes/networth'
 import pricesRoutes from './routes/prices'
 import projectionRoutes from './routes/projection'
 import insightsRoutes from './routes/insights'
+import adminRoutes from './routes/admin'
 import profileRoutes from './routes/profile'
 import { initScheduler } from './scheduler'
 
@@ -26,6 +27,7 @@ app.use('/api/networth', networthRoutes)
 app.use('/api/prices', pricesRoutes)
 app.use('/api/projection', projectionRoutes)
 app.use('/api/insights', insightsRoutes)
+app.use('/api/admin', adminRoutes)
 app.use('/api/profile', profileRoutes)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))

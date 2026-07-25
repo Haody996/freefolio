@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Retirement from './pages/Retirement'
+import Admin from './pages/Admin'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,7 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="retirement" element={<Retirement />} />
+            <Route path="admin" element={<Admin />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
