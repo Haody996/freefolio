@@ -72,28 +72,35 @@ function FireProgress({ netWorth, fireGoal, projectedGoal, goalIsCustom, onSetGo
   const progress = t * 100
   const full = t >= 0.999
 
-  // Heat: the leading edge shifts from ember-red → orange → gold as you near FIRE,
-  // and the glow intensifies. At 100% the whole bar blazes (animated in index.css).
+  // Heat: a bright-red left that runs hotter (orange → gold) toward the leading
+  // edge as you near FIRE, with an intensifying glow. At 100% the whole bar blazes.
   const hot = `rgb(255, ${Math.round(69 + 141 * t)}, ${Math.round(63 * t)})`
-  const fillBg = `linear-gradient(90deg, #3d0800, #b31a00, ${hot})`
-  const glow = `0 0 ${Math.round(4 + 12 * t)}px rgba(255, ${Math.round(69 + 110 * t)}, 0, ${(0.25 + 0.5 * t).toFixed(2)})`
+  const fillBg = `linear-gradient(90deg, #ff3d00, #ff6a00, ${hot})`
+  const glow = `0 0 ${Math.round(5 + 12 * t)}px rgba(255, ${Math.round(90 + 90 * t)}, 0, ${(0.35 + 0.45 * t).toFixed(2)})`
 
   return (
     <>
       <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS {full && '🔥'}</div>
-      <div style={{ margin: '10px 0 8px', height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-        <div
-          className={full ? 'fire-blaze' : undefined}
-          style={{
-            height: '100%',
-            borderRadius: 8,
-            width: `${progress.toFixed(1)}%`,
-            minWidth: t > 0 ? 6 : 0,
-            background: full ? undefined : fillBg,
-            boxShadow: full ? undefined : glow,
-            transition: 'width .3s ease',
-          }}
-        />
+      <div style={{ position: 'relative', margin: '10px 0 8px' }}>
+        <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+          <div
+            className={full ? 'fire-blaze' : undefined}
+            style={{
+              height: '100%',
+              borderRadius: 8,
+              width: `${progress.toFixed(1)}%`,
+              minWidth: t > 0 ? 6 : 0,
+              background: full ? undefined : fillBg,
+              boxShadow: full ? undefined : glow,
+              transition: 'width .3s ease',
+            }}
+          />
+        </div>
+        {full && (
+          <span className="fire-emoji-pix" style={{ position: 'absolute', right: -2, top: '50%', transformOrigin: 'right center' }} aria-hidden>
+            🔥
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 12, color: '#8A90A2', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
         <span style={{ color: '#F2F4F8', fontWeight: 700 }}>{fmtCompact(netWorth)}</span> /
