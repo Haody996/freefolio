@@ -51,7 +51,15 @@ export default function Dashboard() {
   const qc = useQueryClient()
   const isMobile = useIsMobile()
 
-  const [privacy, setPrivacy] = useState(false)
+  // Persist the hide-balances preference across sessions (per device).
+  const [privacy, setPrivacy] = useState(() => localStorage.getItem('freefolio_privacy') === '1')
+  function togglePrivacy() {
+    setPrivacy((p) => {
+      const next = !p
+      localStorage.setItem('freefolio_privacy', next ? '1' : '0')
+      return next
+    })
+  }
   const [range, setRange] = useState<Range>('1Y')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
@@ -164,7 +172,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => setPrivacy((p) => !p)} style={secondaryBtn}>
+          <button onClick={togglePrivacy} style={secondaryBtn}>
             {privacy ? 'Show' : 'Hide'} balances
           </button>
           <button onClick={openAdd} style={primaryBtn}>
