@@ -393,6 +393,8 @@ export default function Dashboard() {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
                     {h.symbol}
                     {acctTag}
+                    {instTag}
+                    {autoTag}
                   </div>
                   <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</div>
                 </div>
