@@ -54,12 +54,30 @@ export function autoFreqShort(f: AutoFrequency): string {
   return FREQ_SHORT.get(f) ?? ''
 }
 
+// Common brokerages/institutions offered as suggestions (free-form entry allowed).
+export const INSTITUTIONS = [
+  'Charles Schwab',
+  'Fidelity',
+  'Vanguard',
+  'Robinhood',
+  'E*TRADE',
+  'Merrill',
+  'TD Ameritrade',
+  'Interactive Brokers',
+  'SoFi',
+  'Wealthfront',
+  'Coinbase',
+  'Kraken',
+  'Ally Invest',
+]
+
 export interface Holding {
   id: string
   symbol: string
   name: string
   category: Category
   accountType: AccountType
+  institution: string
   quantity: number
   price: number
   prevClose: number

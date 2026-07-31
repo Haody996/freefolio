@@ -83,11 +83,12 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const qty = Number(quantity) || 0
   const cat = normCategory(category)
   const acct = normAccountType(accountType)
+  const inst = String(req.body.institution || '').trim()
 
-  // A ticker only combines within the same account; the same ticker in a
-  // different account is a separate position.
+  // A ticker only combines within the same account AND institution; the same
+  // ticker in a different account or brokerage is a separate position.
   const existing = await prisma.holding.findUnique({
-    where: { userId_symbol_accountType: { userId: req.userId!, symbol: sym, accountType: acct } },
+    where: { userId_symbol_accountType_institution: { userId: req.userId!, symbol: sym, accountType: acct, institution: inst } },
   })
 
   if (existing) {
@@ -113,6 +114,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       name: String(name || '').trim() || sym,
       category: cat,
       accountType: acct,
+      institution: inst,
       quantity: qty,
       price: p,
       prevClose: pc,
@@ -131,7 +133,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(404).json({ error: 'Holding not found' })
     return
   }
-  const { symbol, name, category, accountType, quantity, price, prevClose } = req.body
+  const { symbol, name, category, accountType, institution, quantity, price, prevClose } = req.body
   const p = price != null ? Number(price) : existing.price
   // Only touch auto-invest fields when the client sends autoAmount (so plain
   // edits don't wipe an existing schedule).
@@ -146,6 +148,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       name: name != null ? String(name).trim() : undefined,
       category: category != null ? normCategory(category) : undefined,
       accountType: accountType != null ? normAccountType(accountType) : undefined,
+      institution: institution != null ? String(institution).trim() : undefined,
       quantity: quantity != null ? Number(quantity) : undefined,
       price: price != null ? p : undefined,
       prevClose: prevClose != null ? Number(prevClose) : undefined,

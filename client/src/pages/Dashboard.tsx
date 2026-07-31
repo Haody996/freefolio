@@ -300,6 +300,11 @@ export default function Dashboard() {
               ⟳ ${Math.round(h.autoAmount)}{autoFreqShort(h.autoFrequency)}
             </span>
           )
+          const instTag = h.institution && (
+            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#C9CDD8', background: 'rgba(255,255,255,0.06)', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>
+              {h.institution}
+            </span>
+          )
 
           if (isMobile) {
             return (
@@ -314,6 +319,7 @@ export default function Dashboard() {
                     <div style={{ fontWeight: 700, fontSize: 14 }}>
                       {h.symbol}
                       {acctTag}
+                      {instTag}
                       {autoTag}
                     </div>
                     <div style={{ fontSize: 12, color: '#8A90A2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

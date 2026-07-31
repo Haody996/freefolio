@@ -78,6 +78,7 @@ model Holding {
   name        String
   category    Category    @default(STOCKS)
   accountType AccountType @default(TAXABLE)
+  institution String      @default("") // free-form brokerage (Schwab, Fidelity…)
   quantity    Float       @default(0)
   price       Float       @default(0)
   prevClose   Float       @default(0)
@@ -92,9 +93,9 @@ model Holding {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  // Same ticker can live in different accounts (e.g. VTI in taxable + Roth IRA),
-  // so uniqueness is per account.
-  @@unique([userId, symbol, accountType])
+  // Same ticker can live in different accounts AND institutions (e.g. VTI in
+  // taxable at Schwab + Roth IRA at Fidelity), so uniqueness spans both.
+  @@unique([userId, symbol, accountType, institution])
   @@index([userId])
   @@index([symbol])
 }

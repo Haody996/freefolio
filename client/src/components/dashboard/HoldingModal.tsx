@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import api from '../../lib/api'
-import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO, ACCOUNT_TYPES, accountTreatment, TREATMENTS, AUTO_FREQUENCIES } from '../../lib/portfolio'
+import { CATEGORIES, CAT_LABEL, catColor, TOP_CRYPTO, ACCOUNT_TYPES, accountTreatment, TREATMENTS, AUTO_FREQUENCIES, INSTITUTIONS } from '../../lib/portfolio'
 import type { Category, AccountType, AutoFrequency, Holding } from '../../lib/portfolio'
 
 export interface Draft {
@@ -8,6 +8,7 @@ export interface Draft {
   name: string
   category: Category
   accountType: AccountType
+  institution: string
   quantity: string
   price: string
   prevClose: string
@@ -21,6 +22,7 @@ export interface SavePayload {
   name: string
   category: Category
   accountType: AccountType
+  institution: string
   quantity: number
   price: number
   prevClose: number
@@ -30,12 +32,13 @@ export interface SavePayload {
 
 function toDraft(h: Holding | null): Draft {
   if (!h)
-    return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', quantity: '', price: '', prevClose: '', autoOn: false, autoAmount: '', autoFrequency: 'MONTHLY' }
+    return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', institution: '', quantity: '', price: '', prevClose: '', autoOn: false, autoAmount: '', autoFrequency: 'MONTHLY' }
   return {
     symbol: h.symbol,
     name: h.name,
     category: h.category,
     accountType: h.accountType,
+    institution: h.institution ?? '',
     quantity: String(h.quantity),
     price: String(h.price),
     prevClose: String(h.prevClose),
@@ -80,11 +83,14 @@ export default function HoldingModal({
   const isEdit = !!editing
   const [draft, setDraft] = useState<Draft>(toDraft(editing))
 
-  // In add mode, warn when the same ticker + account already exists — saving
-  // combines quantities (same ticker in a different account stays separate).
+  // In add mode, warn when the same ticker + account + institution already exists —
+  // saving combines quantities (a different account or brokerage stays separate).
   const dup = !isEdit
     ? existing.find(
-        (h) => h.symbol === draft.symbol.toUpperCase().trim() && h.accountType === draft.accountType
+        (h) =>
+          h.symbol === draft.symbol.toUpperCase().trim() &&
+          h.accountType === draft.accountType &&
+          (h.institution ?? '') === draft.institution.trim()
       )
     : undefined
   const addQty = parseFloat(draft.quantity) || 0
@@ -137,6 +143,7 @@ export default function HoldingModal({
       name: draft.name.trim() || symbol,
       category: draft.category,
       accountType: draft.accountType,
+      institution: draft.institution.trim(),
       quantity: parseFloat(draft.quantity) || 0,
       price,
       prevClose: draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price,
@@ -247,6 +254,22 @@ export default function HoldingModal({
                 </span>
               )
             })()}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={labelStyle}>Institution / brokerage</label>
+            <input
+              value={draft.institution}
+              onChange={(e) => set('institution', e.target.value)}
+              list="ff-institutions"
+              placeholder="e.g. Charles Schwab (optional)"
+              style={inputStyle}
+            />
+            <datalist id="ff-institutions">
+              {INSTITUTIONS.map((i) => (
+                <option key={i} value={i} />
+              ))}
+            </datalist>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 12 }}>
@@ -384,7 +407,8 @@ export default function HoldingModal({
               }}
             >
               You already hold <b>{dup.symbol}</b> ({dup.quantity}) in your{' '}
-              <b>{ACCOUNT_TYPES.find((a) => a.value === dup.accountType)?.short}</b> account. Saving will{' '}
+              <b>{ACCOUNT_TYPES.find((a) => a.value === dup.accountType)?.short}</b>
+              {dup.institution ? <> account at <b>{dup.institution}</b></> : ' account'}. Saving will{' '}
               <b>combine</b> them into <b>{dup.quantity + addQty}</b> — the existing position won't be replaced.
             </div>
           )}
