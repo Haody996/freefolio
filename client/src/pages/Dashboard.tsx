@@ -319,8 +319,22 @@ export default function Dashboard() {
               {h.symbol.slice(0, 4)}
             </span>
           )
-          const acctTag = h.accountType !== 'TAXABLE' && (
-            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#8A90A2', background: 'rgba(255,255,255,0.06)', borderRadius: 5, padding: '1px 5px' }}>
+          // Account-type tag on every holding (401(k), Roth IRA, Taxable, …);
+          // tax-advantaged accounts get a purple accent, taxable stays muted.
+          const acctAccent = h.accountType !== 'TAXABLE' && h.accountType !== 'OTHER'
+          const acctTag = (
+            <span
+              style={{
+                marginLeft: 6,
+                fontSize: 10,
+                fontWeight: 700,
+                color: acctAccent ? '#9B7CFF' : '#8A90A2',
+                background: acctAccent ? 'rgba(155,124,255,0.14)' : 'rgba(255,255,255,0.06)',
+                borderRadius: 5,
+                padding: '1px 5px',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {accountLabel(h.accountType)}
             </span>
           )
