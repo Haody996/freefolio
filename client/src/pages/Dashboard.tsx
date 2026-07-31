@@ -24,6 +24,7 @@ import {
   accountLabel,
   autoFreqShort,
   computeTaxBreakdown,
+  computeBrokerageBreakdown,
 } from '../lib/portfolio'
 import type { Holding } from '../lib/portfolio'
 
@@ -128,6 +129,7 @@ export default function Dashboard() {
   // ─── Derived ───────────────────────────────────────────────────────
   const alloc = computeAllocation(totals)
   const taxBreakdown = computeTaxBreakdown(holdings)
+  const brokerageBreakdown = computeBrokerageBreakdown(holdings)
 
   const backend = historyQ.data?.history ?? []
   let hist = backend.map((p) => ({ date: new Date(p.date), value: p.netWorth }))
@@ -258,6 +260,33 @@ export default function Dashboard() {
                   </div>
                   <div style={{ fontFamily: "'Space Grotesk'", fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {mask(fmtUSD(t.value), privacy)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* By account / brokerage */}
+      {brokerageBreakdown.length > 1 && (
+        <section style={panel}>
+          <div style={panelTitle}>By account / brokerage</div>
+          <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', gap: 2 }}>
+            {brokerageBreakdown.map((b) => (
+              <div key={b.label} style={{ width: `${b.pct * 100}%`, background: b.color }} title={`${b.label} ${pct(b.pct)}`} />
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14, marginTop: 16 }}>
+            {brokerageBreakdown.map((b) => (
+              <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: b.color, flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: '#8A90A2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {b.label} · {pct(b.pct)}
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {mask(fmtUSD(b.value), privacy)}
                   </div>
                 </div>
               </div>

@@ -94,6 +94,30 @@ export interface TreatmentSegment {
   pct: number
 }
 
+export interface BrokerageSegment {
+  label: string
+  value: number
+  pct: number
+  color: string
+}
+
+// A distinct color palette for grouping by brokerage.
+const BROKERAGE_PALETTE = ['#22E38A', '#35A0FF', '#9B7CFF', '#FFB020', '#FF6FB5', '#5AD1C8', '#F5A524', '#7C5CFF', '#FF5470', '#8A90A2']
+
+// Total value grouped by institution / brokerage (blank → "Unassigned").
+export function computeBrokerageBreakdown(holdings: Holding[]): BrokerageSegment[] {
+  const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
+  const m = new Map<string, number>()
+  for (const h of holdings) {
+    const key = (h.institution || '').trim() || 'Unassigned'
+    m.set(key, (m.get(key) || 0) + h.quantity * h.price)
+  }
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, pct: total ? value / total : 0, color: BROKERAGE_PALETTE[i % BROKERAGE_PALETTE.length] }))
+    .filter((s) => s.value > 0)
+}
+
 // Total value grouped by tax treatment (pre-tax / Roth / taxable).
 export function computeTaxBreakdown(holdings: Holding[]): TreatmentSegment[] {
   const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
