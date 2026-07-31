@@ -205,6 +205,64 @@ export function computeTotals(holdings: Holding[]): Totals {
   return { total, day, dayPct: total - day ? day / (total - day) : 0, en }
 }
 
+// A generic allocation slice (used by the donut in both "class" and "ticker" modes).
+export interface AllocSlice {
+  key: string
+  label: string
+  value: number
+  pct: number
+  color: string
+}
+
+// Index-fund families that can optionally be grouped into a single slice.
+const SP500_FUNDS = new Set(['VOO', 'VFIAX', 'VLISX', 'SPY', 'IVV', 'FXAIX', 'SWPPX', 'SPLG', 'VFINX', 'SPXL', 'UPRO'])
+const NASDAQ100_FUNDS = new Set(['QQQ', 'QQQM', 'QQEW', 'ONEQ', 'QLD', 'TQQQ'])
+
+const SLICE_PALETTE = ['#22E38A', '#35A0FF', '#9B7CFF', '#FFB020', '#FF6FB5', '#5AD1C8', '#F5A524', '#7C5CFF', '#FF5470', '#4ADE80', '#38BDF8', '#C084FC']
+
+function tickerSliceKey(symbol: string, groupIndex: boolean): string {
+  const s = symbol.toUpperCase()
+  if (groupIndex) {
+    if (SP500_FUNDS.has(s)) return 'S&P 500'
+    if (NASDAQ100_FUNDS.has(s)) return 'Nasdaq 100'
+  }
+  return s
+}
+
+// Allocation slices for the donut: by asset class, or by ticker (optionally
+// rolling up S&P 500 / Nasdaq 100 index funds), capped to keep the chart readable.
+export function computeAllocationSlices(
+  holdings: Holding[],
+  mode: 'class' | 'ticker',
+  groupIndex: boolean,
+  maxSlices = 10
+): AllocSlice[] {
+  const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
+
+  if (mode === 'class') {
+    const m = new Map<Category, number>()
+    for (const h of holdings) m.set(h.category, (m.get(h.category) || 0) + h.quantity * h.price)
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, value]) => ({ key: cat, label: CAT_LABEL[cat], value, pct: total ? value / total : 0, color: CAT_COLOR[cat] }))
+      .filter((s) => s.value > 0)
+  }
+
+  const m = new Map<string, number>()
+  for (const h of holdings) {
+    const k = tickerSliceKey(h.symbol, groupIndex)
+    m.set(k, (m.get(k) || 0) + h.quantity * h.price)
+  }
+  let entries = [...m.entries()].sort((a, b) => b[1] - a[1])
+  if (entries.length > maxSlices) {
+    const rest = entries.slice(maxSlices - 1).reduce((s, [, v]) => s + v, 0)
+    entries = [...entries.slice(0, maxSlices - 1), ['Other', rest] as [string, number]]
+  }
+  return entries
+    .map(([key, value], i) => ({ key, label: key, value, pct: total ? value / total : 0, color: key === 'Other' ? '#8A90A2' : SLICE_PALETTE[i % SLICE_PALETTE.length] }))
+    .filter((s) => s.value > 0)
+}
+
 export function computeAllocation(t: Totals): AllocSegment[] {
   const m: Partial<Record<Category, number>> = {}
   t.en.forEach((h) => (m[h.category] = (m[h.category] || 0) + h.value))

@@ -12,6 +12,8 @@ import type { SavePayload } from '../components/dashboard/HoldingModal'
 import {
   computeTotals,
   computeAllocation,
+  computeAllocationSlices,
+  accountTreatment,
   fallbackHistory,
   fmtUSD,
   fmtCompact,
@@ -20,7 +22,6 @@ import {
   pct,
   mask,
   catColor,
-  CAT_LABEL,
   accountLabel,
   autoFreqShort,
   computeTaxBreakdown,
@@ -64,6 +65,25 @@ export default function Dashboard() {
   const [range, setRange] = useState<Range>('1Y')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
+
+  // Allocation donut: by asset class or by ticker (+ optional index-fund grouping).
+  const [allocMode, setAllocMode] = useState<'class' | 'ticker'>(() => (localStorage.getItem('ff_alloc_mode') === 'ticker' ? 'ticker' : 'class'))
+  const [groupIdx, setGroupIdx] = useState(() => localStorage.getItem('ff_alloc_group') !== '0')
+  function chooseAllocMode(m: 'class' | 'ticker') {
+    localStorage.setItem('ff_alloc_mode', m)
+    setAllocMode(m)
+  }
+  function toggleGroupIdx() {
+    setGroupIdx((g) => {
+      localStorage.setItem('ff_alloc_group', g ? '0' : '1')
+      return !g
+    })
+  }
+
+  // Holdings filters + sort.
+  const [acctFilter, setAcctFilter] = useState<'ALL' | 'PRE_TAX' | 'ROTH' | 'TAXABLE'>('ALL')
+  const [brokerFilter, setBrokerFilter] = useState('ALL')
+  const [sortBy, setSortBy] = useState<'value' | 'day' | 'ticker' | 'broker'>('value')
 
   const holdingsQ = useQuery<{ holdings: Holding[] }>({
     queryKey: ['holdings'],
@@ -128,8 +148,33 @@ export default function Dashboard() {
 
   // ─── Derived ───────────────────────────────────────────────────────
   const alloc = computeAllocation(totals)
+  const allocSlices = computeAllocationSlices(holdings, allocMode, groupIdx)
   const taxBreakdown = computeTaxBreakdown(holdings)
   const brokerageBreakdown = computeBrokerageBreakdown(holdings)
+
+  // Holdings filter + sort/rank.
+  const brokers = [...new Set(holdings.map((h) => (h.institution || '').trim()).filter(Boolean))].sort()
+  const brokerTotals = new Map<string, number>()
+  for (const h of totals.en) {
+    const k = (h.institution || '').trim() || '—'
+    brokerTotals.set(k, (brokerTotals.get(k) || 0) + h.value)
+  }
+  const filteredRows = totals.en
+    .filter((h) => acctFilter === 'ALL' || accountTreatment(h.accountType) === acctFilter)
+    .filter((h) => brokerFilter === 'ALL' || ((h.institution || '').trim() || '—') === brokerFilter)
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    if (sortBy === 'value') return b.value - a.value
+    if (sortBy === 'day') return b.dayChg - a.dayChg
+    if (sortBy === 'ticker') return a.symbol.localeCompare(b.symbol)
+    // by brokerage: rank brokerages by total value, then holdings by value
+    const ka = (a.institution || '').trim() || '—'
+    const kb = (b.institution || '').trim() || '—'
+    const ta = brokerTotals.get(ka) || 0
+    const tb = brokerTotals.get(kb) || 0
+    if (tb !== ta) return tb - ta
+    if (ka !== kb) return ka.localeCompare(kb)
+    return b.value - a.value
+  })
 
   const backend = historyQ.data?.history ?? []
   let hist = backend.map((p) => ({ date: new Date(p.date), value: p.netWorth }))
@@ -203,17 +248,30 @@ export default function Dashboard() {
       {/* Allocation + Snapshot */}
       <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '420px 1fr', gap: isMobile ? 16 : 20 }}>
         <div style={panel}>
-          <div style={panelTitle}>Allocation</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            <div style={{ ...panelTitle, margin: 0 }}>Allocation</div>
+            <div style={{ display: 'flex', gap: 3, background: 'rgba(255,255,255,0.04)', padding: 3, borderRadius: 9 }}>
+              {(['class', 'ticker'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => chooseAllocMode(m)}
+                  style={{ padding: '4px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', background: allocMode === m ? 'rgba(34,227,138,0.16)' : 'transparent', color: allocMode === m ? '#22E38A' : '#8A90A2' }}
+                >
+                  {m === 'class' ? 'Class' : 'Ticker'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ flexShrink: 0 }}>
-              <DonutChart alloc={alloc} total={totals.total} privacy={privacy} />
+              <DonutChart slices={allocSlices} total={totals.total} privacy={privacy} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1, minWidth: 0 }}>
-              {alloc.map((a) => (
-                <div key={a.cat} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, flex: 1, minWidth: 0, maxHeight: 168, overflowY: 'auto' }}>
+              {allocSlices.map((a) => (
+                <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, minWidth: 0 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: a.color }} />
                   <span style={{ color: '#C9CDD8', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {CAT_LABEL[a.cat]}
+                    {a.label}
                   </span>
                   <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>{pct(a.pct)}</span>
                   <span style={{ color: '#8A90A2', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -223,6 +281,12 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+          {allocMode === 'ticker' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: '#8A90A2', cursor: 'pointer' }}>
+              <input type="checkbox" checked={groupIdx} onChange={toggleGroupIdx} style={{ accentColor: '#22E38A', width: 14, height: 14 }} />
+              Group index funds (S&amp;P 500, Nasdaq 100)
+            </label>
+          )}
         </div>
 
         <div style={panel}>
@@ -297,7 +361,31 @@ export default function Dashboard() {
 
       {/* Holdings */}
       <section style={panel}>
-        <div style={panelTitle}>Holdings</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <div style={{ ...panelTitle, margin: 0 }}>Holdings</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={acctFilter} onChange={(e) => setAcctFilter(e.target.value as typeof acctFilter)} style={filterSelect}>
+              <option value="ALL" style={filterOpt}>All accounts</option>
+              <option value="PRE_TAX" style={filterOpt}>Pre-tax</option>
+              <option value="ROTH" style={filterOpt}>Roth (tax-free)</option>
+              <option value="TAXABLE" style={filterOpt}>Taxable</option>
+            </select>
+            {brokers.length > 0 && (
+              <select value={brokerFilter} onChange={(e) => setBrokerFilter(e.target.value)} style={filterSelect}>
+                <option value="ALL" style={filterOpt}>All brokerages</option>
+                {brokers.map((b) => (
+                  <option key={b} value={b} style={filterOpt}>{b}</option>
+                ))}
+              </select>
+            )}
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} style={filterSelect}>
+              <option value="value" style={filterOpt}>Sort: Value</option>
+              <option value="day" style={filterOpt}>Sort: Day change</option>
+              <option value="broker" style={filterOpt}>Sort: Brokerage</option>
+              <option value="ticker" style={filterOpt}>Sort: Ticker</option>
+            </select>
+          </div>
+        </div>
         {!isMobile && (
           <div style={{ ...holdingsGrid, padding: '0 4px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', fontSize: 11, letterSpacing: 0.6, color: '#8A90A2', fontWeight: 700, textTransform: 'uppercase' }}>
             <div>Asset</div>
@@ -307,12 +395,14 @@ export default function Dashboard() {
             <div style={{ textAlign: 'right' }}>Value / Alloc</div>
           </div>
         )}
-        {totals.en.length === 0 && (
+        {totals.en.length === 0 ? (
           <div style={{ padding: '28px 4px', textAlign: 'center', color: '#8A90A2', fontSize: 13 }}>
             No holdings yet — hit “+ Add holding” to start.
           </div>
-        )}
-        {totals.en.map((h) => {
+        ) : sortedRows.length === 0 ? (
+          <div style={{ padding: '28px 4px', textAlign: 'center', color: '#8A90A2', fontSize: 13 }}>No holdings match this filter.</div>
+        ) : null}
+        {sortedRows.map((h) => {
           const shares = h.quantity === 1 || h.category === 'CASH' || h.category === 'OTHER' ? '—' : mask(`${h.quantity}`, privacy)
           const badge = (
             <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: catColor(h.category), color: '#04140C' }}>
@@ -451,3 +541,15 @@ const holdingsGrid: React.CSSProperties = {
   gridTemplateColumns: '2fr 1.1fr 1fr 1fr 1.1fr',
   gap: 12,
 }
+const filterSelect: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.05)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 8,
+  padding: '5px 8px',
+  color: '#C9CDD8',
+  fontSize: 12,
+  fontWeight: 600,
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+}
+const filterOpt: React.CSSProperties = { background: '#16181F' }

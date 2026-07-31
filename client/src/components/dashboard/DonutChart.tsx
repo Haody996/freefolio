@@ -1,12 +1,12 @@
 import { fmtCompact, mask } from '../../lib/portfolio'
-import type { AllocSegment } from '../../lib/portfolio'
+import type { AllocSlice } from '../../lib/portfolio'
 
 export default function DonutChart({
-  alloc,
+  slices,
   total,
   privacy,
 }: {
-  alloc: AllocSegment[]
+  slices: AllocSlice[]
   total: number
   privacy: boolean
 }) {
@@ -18,11 +18,11 @@ export default function DonutChart({
   const C = 2 * Math.PI * r
   let off = 0
 
-  const segs = alloc.map((s) => {
+  const segs = slices.map((s) => {
     const len = s.pct * C
     const el = (
       <circle
-        key={s.cat}
+        key={s.key}
         cx={cx}
         cy={cy}
         r={r}

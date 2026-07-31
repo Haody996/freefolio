@@ -15,6 +15,7 @@ export interface Draft {
   autoOn: boolean
   autoAmount: string
   autoFrequency: AutoFrequency
+  autoStartDate: string
 }
 
 export interface SavePayload {
@@ -28,11 +29,12 @@ export interface SavePayload {
   prevClose: number
   autoAmount: number | null
   autoFrequency: AutoFrequency | null
+  autoStartDate: string | null
 }
 
 function toDraft(h: Holding | null): Draft {
   if (!h)
-    return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', institution: '', quantity: '', price: '', prevClose: '', autoOn: false, autoAmount: '', autoFrequency: 'MONTHLY' }
+    return { symbol: '', name: '', category: 'STOCKS', accountType: 'TAXABLE', institution: '', quantity: '', price: '', prevClose: '', autoOn: false, autoAmount: '', autoFrequency: 'MONTHLY', autoStartDate: '' }
   return {
     symbol: h.symbol,
     name: h.name,
@@ -45,6 +47,7 @@ function toDraft(h: Holding | null): Draft {
     autoOn: h.autoAmount != null && h.autoAmount > 0,
     autoAmount: h.autoAmount != null ? String(h.autoAmount) : '',
     autoFrequency: h.autoFrequency ?? 'MONTHLY',
+    autoStartDate: h.autoNextAt ? new Date(h.autoNextAt).toISOString().slice(0, 10) : '',
   }
 }
 
@@ -149,6 +152,7 @@ export default function HoldingModal({
       prevClose: draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price,
       autoAmount: autoAmt,
       autoFrequency: autoAmt != null ? draft.autoFrequency : null,
+      autoStartDate: autoAmt != null && draft.autoStartDate ? draft.autoStartDate : null,
     })
   }
 
@@ -383,12 +387,22 @@ export default function HoldingModal({
                       ))}
                     </select>
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>{isEdit ? 'Next contribution date' : 'Start date'}</label>
+                    <input
+                      type="date"
+                      value={draft.autoStartDate}
+                      onChange={(e) => set('autoStartDate', e.target.value)}
+                      style={{ ...inputStyle, cursor: 'pointer', colorScheme: 'dark' }}
+                    />
+                  </div>
                 </div>
                 <span style={{ fontSize: 12, color: '#8A90A2' }}>
                   Adds{' '}
                   <b style={{ color: '#22E38A' }}>${draft.autoAmount || '0'}</b> of{' '}
                   {draft.symbol.toUpperCase() || 'this holding'}{' '}
-                  {AUTO_FREQUENCIES.find((f) => f.value === draft.autoFrequency)?.label.toLowerCase()}, converted to shares at that day's price.
+                  {AUTO_FREQUENCIES.find((f) => f.value === draft.autoFrequency)?.label.toLowerCase()}
+                  {draft.autoStartDate ? `, starting ${draft.autoStartDate}` : ' (starting next period)'}, at that day's price.
                 </span>
               </>
             )}

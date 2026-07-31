@@ -47,7 +47,16 @@ function autoInvestData(
   if (amount == null || freq == null) {
     return { autoAmount: null, autoFrequency: null, autoNextAt: null }
   }
-  const autoNextAt = currentFreq === freq && currentNextAt ? currentNextAt : nextRun(new Date(), freq)
+  // Explicit start date wins; else keep the existing schedule (same frequency),
+  // otherwise start next period from now.
+  const startRaw = body.autoStartDate
+  const startDate = startRaw ? new Date(startRaw) : null
+  const autoNextAt =
+    startDate && !isNaN(startDate.getTime())
+      ? startDate
+      : currentFreq === freq && currentNextAt
+        ? currentNextAt
+        : nextRun(new Date(), freq)
   return { autoAmount: amount, autoFrequency: freq, autoNextAt }
 }
 
