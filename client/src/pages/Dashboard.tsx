@@ -67,7 +67,7 @@ export default function Dashboard() {
   const [editing, setEditing] = useState<Holding | null>(null)
 
   // Allocation donut: by asset class or by ticker (+ optional index-fund grouping).
-  const [allocMode, setAllocMode] = useState<'class' | 'ticker'>(() => (localStorage.getItem('ff_alloc_mode') === 'ticker' ? 'ticker' : 'class'))
+  const [allocMode, setAllocMode] = useState<'class' | 'ticker'>(() => (localStorage.getItem('ff_alloc_mode') === 'class' ? 'class' : 'ticker'))
   const [groupIdx, setGroupIdx] = useState(() => localStorage.getItem('ff_alloc_group') !== '0')
   function chooseAllocMode(m: 'class' | 'ticker') {
     localStorage.setItem('ff_alloc_mode', m)
@@ -251,7 +251,7 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <div style={{ ...panelTitle, margin: 0 }}>Allocation</div>
             <div style={{ display: 'flex', gap: 3, background: 'rgba(255,255,255,0.04)', padding: 3, borderRadius: 9 }}>
-              {(['class', 'ticker'] as const).map((m) => (
+              {(['ticker', 'class'] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => chooseAllocMode(m)}
