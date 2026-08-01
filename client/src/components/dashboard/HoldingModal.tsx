@@ -184,6 +184,8 @@ export default function HoldingModal({
         style={{
           width: 460,
           maxWidth: '100%',
+          maxHeight: 'calc(100vh - 48px)',
+          overflowY: 'auto',
           background: '#16181F',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 20,
