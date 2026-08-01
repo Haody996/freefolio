@@ -111,6 +111,8 @@ export default function HoldingModal({
   }
 
   const isMarketPriced = draft.category !== 'CASH' && draft.category !== 'OTHER'
+  const isCash = draft.category === 'CASH'
+  const isManual = !isMarketPriced // cash / other → single balance field
 
   // When a ticker is typed/picked, set its name (for known crypto) and fetch a
   // live quote to prefill price + previous close where those fields are empty.
@@ -145,10 +147,12 @@ export default function HoldingModal({
 
   function save() {
     const price = parseFloat(draft.price) || 0
-    const symbol = draft.symbol.toUpperCase().trim() || 'NEW'
-    const autoAmt = draft.autoOn && parseFloat(draft.autoAmount) > 0 ? parseFloat(draft.autoAmount) : null
-    // Quantity is either entered directly or derived from a dollar amount.
-    const quantity = entryBy === 'amount' ? computedShares : parseFloat(draft.quantity) || 0
+    const symbol = draft.symbol.toUpperCase().trim() || (isCash ? 'CASH' : 'NEW')
+    // Cash / other: store the balance as a single-unit position (qty 1, price = balance),
+    // no market pricing or auto-invest.
+    const quantity = isManual ? 1 : entryBy === 'amount' ? computedShares : parseFloat(draft.quantity) || 0
+    const prevClose = isManual ? price : draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price
+    const autoAmt = !isManual && draft.autoOn && parseFloat(draft.autoAmount) > 0 ? parseFloat(draft.autoAmount) : null
     onSave({
       symbol,
       name: draft.name.trim() || symbol,
@@ -157,7 +161,7 @@ export default function HoldingModal({
       institution: draft.institution.trim(),
       quantity,
       price,
-      prevClose: draft.prevClose !== '' && !isNaN(parseFloat(draft.prevClose)) ? parseFloat(draft.prevClose) : price,
+      prevClose,
       autoAmount: autoAmt,
       autoFrequency: autoAmt != null ? draft.autoFrequency : null,
       autoStartDate: autoAmt != null && draft.autoStartDate ? draft.autoStartDate : null,
@@ -288,13 +292,13 @@ export default function HoldingModal({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={labelStyle}>Ticker</label>
+              <label style={labelStyle}>{isManual ? 'Label' : 'Ticker'}</label>
               <input
                 value={draft.symbol}
                 onChange={(e) => onTicker(e.target.value)}
                 onBlur={syncQuote}
                 list={draft.category === 'CRYPTO' ? 'ff-top-crypto' : undefined}
-                placeholder={draft.category === 'CRYPTO' ? 'e.g. BTC' : 'e.g. TSLA'}
+                placeholder={isCash ? 'e.g. HYSA' : draft.category === 'OTHER' ? 'e.g. RSU' : draft.category === 'CRYPTO' ? 'e.g. BTC' : 'e.g. TSLA'}
                 style={{ ...inputStyle, fontWeight: 600, textTransform: 'uppercase' }}
               />
               {draft.category === 'CRYPTO' && (
@@ -308,55 +312,67 @@ export default function HoldingModal({
               )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={labelStyle}>Name</label>
-              <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Tesla Inc" style={inputStyle} />
+              <label style={labelStyle}>{isManual ? 'Description' : 'Name'}</label>
+              <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder={isCash ? 'e.g. Ally Savings' : 'e.g. Tesla Inc'} style={inputStyle} />
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {isManual ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                <label style={labelStyle}>{entryBy === 'amount' ? 'Amount' : 'Quantity'}</label>
-                <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 7, padding: 2 }}>
-                  {(['shares', 'amount'] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setEntryBy(m)}
-                      style={{ padding: '2px 7px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: 'inherit', background: entryBy === m ? '#22E38A' : 'transparent', color: entryBy === m ? '#04140C' : '#8A90A2' }}
-                    >
-                      {m === 'shares' ? 'Shares' : '$'}
-                    </button>
-                  ))}
+              <label style={labelStyle}>{isCash ? 'Cash balance' : 'Current value'}</label>
+              <div style={{ display: 'flex', alignItems: 'center', ...inputStyle, padding: 0 }}>
+                <span style={{ paddingLeft: 11, color: '#8A90A2', fontSize: 14 }}>$</span>
+                <input value={draft.price} onChange={(e) => set('price', e.target.value)} type="number" step="any" placeholder="0.00" style={{ width: '100%', minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#F2F4F8', fontSize: 14, padding: '11px 11px', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <label style={labelStyle}>{entryBy === 'amount' ? 'Amount' : 'Quantity'}</label>
+                    <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 7, padding: 2 }}>
+                      {(['shares', 'amount'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setEntryBy(m)}
+                          style={{ padding: '2px 7px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: 'inherit', background: entryBy === m ? '#22E38A' : 'transparent', color: entryBy === m ? '#04140C' : '#8A90A2' }}
+                        >
+                          {m === 'shares' ? 'Shares' : '$'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {entryBy === 'amount' ? (
+                    <div style={{ display: 'flex', alignItems: 'center', ...inputStyle, padding: 0 }}>
+                      <span style={{ paddingLeft: 11, color: '#8A90A2', fontSize: 14 }}>$</span>
+                      <input value={amountInput} onChange={(e) => setAmountInput(e.target.value)} type="number" step="any" placeholder="1000" style={{ width: '100%', minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#F2F4F8', fontSize: 14, padding: '11px 11px', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }} />
+                    </div>
+                  ) : (
+                    <input value={draft.quantity} onChange={(e) => set('quantity', e.target.value)} type="number" step="any" placeholder="0" style={inputStyle} />
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={labelStyle}>Price</label>
+                  <input value={draft.price} onChange={(e) => set('price', e.target.value)} type="number" step="any" placeholder="0.00" style={inputStyle} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={labelStyle}>Prev close</label>
+                  <input value={draft.prevClose} onChange={(e) => set('prevClose', e.target.value)} type="number" step="any" placeholder="optional" style={inputStyle} />
                 </div>
               </div>
-              {entryBy === 'amount' ? (
-                <div style={{ display: 'flex', alignItems: 'center', ...inputStyle, padding: 0 }}>
-                  <span style={{ paddingLeft: 11, color: '#8A90A2', fontSize: 14 }}>$</span>
-                  <input value={amountInput} onChange={(e) => setAmountInput(e.target.value)} type="number" step="any" placeholder="1000" style={{ width: '100%', minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#F2F4F8', fontSize: 14, padding: '11px 11px', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums' }} />
-                </div>
-              ) : (
-                <input value={draft.quantity} onChange={(e) => set('quantity', e.target.value)} type="number" step="any" placeholder="0" style={inputStyle} />
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={labelStyle}>Price</label>
-              <input value={draft.price} onChange={(e) => set('price', e.target.value)} type="number" step="any" placeholder="0.00" style={inputStyle} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={labelStyle}>Prev close</label>
-              <input value={draft.prevClose} onChange={(e) => set('prevClose', e.target.value)} type="number" step="any" placeholder="optional" style={inputStyle} />
-            </div>
-          </div>
 
-          {entryBy === 'amount' && (
-            <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
-              {priceNum > 0 ? (
-                <>≈ <b style={{ color: '#22E38A' }}>{computedShares.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b> shares at ${priceNum.toLocaleString('en-US', { maximumFractionDigits: 2 })}/share</>
-              ) : (
-                'Enter a price first to convert the amount into shares.'
+              {entryBy === 'amount' && (
+                <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
+                  {priceNum > 0 ? (
+                    <>≈ <b style={{ color: '#22E38A' }}>{computedShares.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b> shares at ${priceNum.toLocaleString('en-US', { maximumFractionDigits: 2 })}/share</>
+                  ) : (
+                    'Enter a price first to convert the amount into shares.'
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {isMarketPriced ? (
@@ -382,11 +398,12 @@ export default function HoldingModal({
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
-              For cash or manual entries, set quantity to 1 and price to the total value.
+              {isCash ? 'Cash is tracked at its balance — no market price needed.' : 'Manual entry — tracked at the value you enter.'}
             </div>
           )}
 
-          {/* Auto-invest (recurring DCA) */}
+          {/* Auto-invest (recurring DCA) — not for cash/manual positions */}
+          {!isManual && (
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input
@@ -449,6 +466,7 @@ export default function HoldingModal({
               </>
             )}
           </div>
+          )}
 
           {dup && (
             <div
