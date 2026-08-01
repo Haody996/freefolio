@@ -107,6 +107,66 @@ function StatCard({ label, value, sub, color, accent }: { label: string; value: 
   )
 }
 
+// Year-by-year compound growth of savings + contributions, up to retirement.
+function AccumulationTable({ plan, result }: { plan: Plan; result: ReturnType<typeof simulateRetirement> }) {
+  const accum = result.series.filter((s) => s.phase === 'accumulate')
+  if (accum.length < 2) {
+    return <div style={{ padding: '24px 4px', textAlign: 'center', color: '#8A90A2', fontSize: 13 }}>You're already at (or past) retirement age — no accumulation years to show.</div>
+  }
+  const annualContrib = plan.monthlyContribution * 12
+  const rows = accum.slice(1).map((s, i) => {
+    const startBal = accum[i].balance
+    const endBal = s.balance
+    return { age: s.age, contrib: annualContrib, growth: endBal - startBal - annualContrib, endBal }
+  })
+  const totalContrib = plan.startingCapital + annualContrib * rows.length
+  const totalGrowth = result.balanceAtRetirement - totalContrib
+
+  const th: React.CSSProperties = { padding: '6px 10px', textAlign: 'right', fontWeight: 700, position: 'sticky', top: 0, background: '#16181F' }
+  const td: React.CSSProperties = { padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: '#8A90A2', marginBottom: 8 }}>
+        Compound growth of savings + contributions, year by year (today's dollars, {result.realReturnPct.toFixed(1)}% real return).
+      </div>
+      <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ color: '#8A90A2', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <th style={{ ...th, textAlign: 'left' }}>Age</th>
+              <th style={th}>Contributions</th>
+              <th style={th}>Growth</th>
+              <th style={th}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: '#8A90A2' }}>
+              <td style={{ ...td, textAlign: 'left' }}>{plan.currentAge} (start)</td>
+              <td style={td}>—</td>
+              <td style={td}>—</td>
+              <td style={{ ...td, fontWeight: 700, color: '#F2F4F8' }}>{fmtUSD(Math.round(accum[0].balance))}</td>
+            </tr>
+            {rows.map((r) => (
+              <tr key={r.age} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <td style={{ ...td, textAlign: 'left' }}>{r.age}</td>
+                <td style={{ ...td, color: '#35A0FF' }}>+{fmtUSD(Math.round(r.contrib))}</td>
+                <td style={{ ...td, color: r.growth >= 0 ? '#22E38A' : '#FF5470' }}>{r.growth >= 0 ? '+' : '−'}{fmtUSD(Math.abs(Math.round(r.growth)))}</td>
+                <td style={{ ...td, fontWeight: 700 }}>{fmtUSD(Math.round(r.endBal))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: '#8A90A2', marginTop: 10 }}>
+        <span>Contributed: <b style={{ color: '#35A0FF' }}>{fmtCompact(totalContrib)}</b></span>
+        <span>Growth: <b style={{ color: '#22E38A' }}>{fmtCompact(totalGrowth)}</b></span>
+        <span>At {plan.retirementAge}: <b style={{ color: '#F2F4F8' }}>{fmtCompact(result.balanceAtRetirement)}</b></span>
+      </div>
+    </div>
+  )
+}
+
 type AnalysisTab = 'probability' | 'confidence' | 'cashflow' | 'withdrawals'
 
 export default function Retirement() {
@@ -115,6 +175,7 @@ export default function Retirement() {
   const [tab, setTab] = useState<AnalysisTab>('probability')
   // Analysis "what-if" override for the starting nest egg (null = use projected).
   const [nestEgg, setNestEgg] = useState<number | null>(null)
+  const [balanceTab, setBalanceTab] = useState<'chart' | 'yearly'>('chart')
 
   const holdingsQ = useQuery<{ holdings: Holding[] }>({
     queryKey: ['holdings'],
@@ -311,19 +372,37 @@ export default function Retirement() {
           </div>
 
           <div style={panel}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               <div style={{ fontFamily: "'Space Grotesk'", fontSize: 16, fontWeight: 600 }}>Portfolio balance by age</div>
-              <div style={{ fontSize: 12, color: '#8A90A2' }}>real dollars · {result.realReturnPct.toFixed(1)}% real return</div>
+              <div style={{ display: 'flex', gap: 3, background: 'rgba(255,255,255,0.04)', padding: 3, borderRadius: 9 }}>
+                {(['chart', 'yearly'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setBalanceTab(t)}
+                    style={{ padding: '4px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', background: balanceTab === t ? 'rgba(34,227,138,0.16)' : 'transparent', color: balanceTab === t ? '#22E38A' : '#8A90A2' }}
+                  >
+                    {t === 'chart' ? 'Chart' : 'Yearly'}
+                  </button>
+                ))}
+              </div>
             </div>
-            <RetirementChart result={result} retirementAge={plan.retirementAge} />
-            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: '#8A90A2', marginTop: 8 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ width: 16, height: 3, borderRadius: 2, background: result.lasts ? '#22E38A' : '#FFB020' }} /> Balance
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ width: 16, height: 0, borderTop: '2px dashed #9B7CFF' }} /> Retirement age
-              </span>
-            </div>
+
+            {balanceTab === 'chart' ? (
+              <>
+                <RetirementChart result={result} retirementAge={plan.retirementAge} />
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, color: '#8A90A2', marginTop: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 16, height: 3, borderRadius: 2, background: result.lasts ? '#22E38A' : '#FFB020' }} /> Balance
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 16, height: 0, borderTop: '2px dashed #9B7CFF' }} /> Retirement age
+                  </span>
+                  <span style={{ marginLeft: 'auto' }}>real dollars · {result.realReturnPct.toFixed(1)}% real return</span>
+                </div>
+              </>
+            ) : (
+              <AccumulationTable plan={plan} result={result} />
+            )}
           </div>
 
           <div
