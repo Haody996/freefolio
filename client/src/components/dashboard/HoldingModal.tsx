@@ -350,7 +350,7 @@ export default function HoldingModal({
           {entryBy === 'amount' && (
             <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -4 }}>
               {priceNum > 0 ? (
-                <>≈ <b style={{ color: '#22E38A' }}>{computedShares.toLocaleString('en-US', { maximumFractionDigits: 6 })}</b> shares at ${priceNum.toLocaleString('en-US', { maximumFractionDigits: 2 })}/share</>
+                <>≈ <b style={{ color: '#22E38A' }}>{computedShares.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b> shares at ${priceNum.toLocaleString('en-US', { maximumFractionDigits: 2 })}/share</>
               ) : (
                 'Enter a price first to convert the amount into shares.'
               )}
