@@ -39,15 +39,18 @@ export const CRYPTO_IDS: Record<string, string> = {
 // block carries the latest price and the previous close directly.
 async function fetchStockQuote(symbol: string): Promise<Quote | null> {
   try {
+    // range=1d so chartPreviousClose is the PRIOR trading day's close (true 24h /
+    // daily change). A wider range makes it the close before the whole window.
     const { data } = await axios.get(`${YAHOO_BASE}/${encodeURIComponent(symbol.toUpperCase())}`, {
-      params: { range: '5d', interval: '1d' },
+      params: { range: '1d', interval: '1d' },
       headers: YAHOO_HEADERS,
       timeout: 8000,
     })
     const meta = data?.chart?.result?.[0]?.meta
     const price = meta?.regularMarketPrice
     if (typeof price === 'number' && price > 0) {
-      const prevClose = typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0 ? meta.chartPreviousClose : price
+      const prev = meta.previousClose ?? meta.chartPreviousClose
+      const prevClose = typeof prev === 'number' && prev > 0 ? prev : price
       return { symbol: symbol.toUpperCase(), price, prevClose, currency: meta.currency || 'USD' }
     }
     return null
