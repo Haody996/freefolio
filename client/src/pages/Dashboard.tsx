@@ -9,6 +9,7 @@ import DonutChart from '../components/dashboard/DonutChart'
 import InsightsPanel from '../components/dashboard/InsightsPanel'
 import HoldingModal from '../components/dashboard/HoldingModal'
 import type { SavePayload } from '../components/dashboard/HoldingModal'
+import TransactionModal from '../components/dashboard/TransactionModal'
 import {
   computeTotals,
   computeAllocation,
@@ -65,6 +66,7 @@ export default function Dashboard() {
   const [range, setRange] = useState<Range>('1Y')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
+  const [txHolding, setTxHolding] = useState<Holding | null>(null)
 
   // Allocation donut: by asset class or by ticker (+ optional index-fund grouping).
   const [allocMode, setAllocMode] = useState<'class' | 'ticker'>(() => (localStorage.getItem('ff_alloc_mode') === 'class' ? 'class' : 'ticker'))
@@ -508,6 +510,18 @@ export default function Dashboard() {
           onClose={() => setModalOpen(false)}
           onSave={(p) => saveHolding.mutate(p)}
           onDelete={(h) => deleteHolding.mutate(h.id)}
+          onTransact={(h) => {
+            setModalOpen(false)
+            setTxHolding(h)
+          }}
+        />
+      )}
+
+      {txHolding && (
+        <TransactionModal
+          holding={txHolding}
+          cashHoldings={holdings.filter((h) => h.category === 'CASH')}
+          onClose={() => setTxHolding(null)}
         />
       )}
     </>

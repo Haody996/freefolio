@@ -20,6 +20,7 @@ model User {
   holdings        Holding[]
   netWorthHistory NetWorthSnapshot[]
   projection      ProjectionSettings?
+  transactions    Transaction[]
 }
 
 model Profile {
@@ -70,6 +71,11 @@ enum WithdrawalStrategy {
   GUARDRAILS
 }
 
+enum TxType {
+  BUY
+  SELL
+}
+
 model Holding {
   id          String      @id @default(cuid())
   userId      String
@@ -95,9 +101,32 @@ model Holding {
 
   // Same ticker can live in different accounts AND institutions (e.g. VTI in
   // taxable at Schwab + Roth IRA at Fidelity), so uniqueness spans both.
+  transactions Transaction[]
+
   @@unique([userId, symbol, accountType, institution])
   @@index([userId])
   @@index([symbol])
+}
+
+// A buy/sell logged against a holding. Applying it adjusts the holding's share
+// quantity and (optionally) a cash holding's balance.
+model Transaction {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  holdingId    String
+  holding      Holding  @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  type         TxType
+  quantity     Float
+  price        Float
+  amount       Float // quantity × price
+  date         DateTime @default(now())
+  affectedCash Boolean  @default(false)
+  cashHoldingId String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([holdingId])
 }
 
 // ─── Net-worth history ───────────────────────────────────────────────

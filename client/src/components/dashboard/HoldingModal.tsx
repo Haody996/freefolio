@@ -76,12 +76,14 @@ export default function HoldingModal({
   onClose,
   onSave,
   onDelete,
+  onTransact,
 }: {
   editing: Holding | null // null = add mode
   existing: Holding[]
   onClose: () => void
   onSave: (p: SavePayload) => void
   onDelete: (h: Holding) => void
+  onTransact?: (h: Holding) => void
 }) {
   const isEdit = !!editing
   const [draft, setDraft] = useState<Draft>(toDraft(editing))
@@ -487,7 +489,7 @@ export default function HoldingModal({
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
             {isEdit && (
               <button
                 onClick={() => editing && onDelete(editing)}
@@ -504,6 +506,24 @@ export default function HoldingModal({
                 }}
               >
                 Delete
+              </button>
+            )}
+            {isEdit && !isManual && onTransact && editing && (
+              <button
+                onClick={() => onTransact(editing)}
+                style={{
+                  padding: '11px 16px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(53,160,255,0.35)',
+                  background: 'rgba(53,160,255,0.12)',
+                  color: '#35A0FF',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                Buy / Sell
               </button>
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
