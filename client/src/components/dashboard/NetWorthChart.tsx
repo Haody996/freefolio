@@ -82,7 +82,7 @@ export default function NetWorthChart({
 
   // Axis label format: day-level for short ranges, month/year for long ones.
   const axisFmt: Intl.DateTimeFormatOptions =
-    range === '1M' || range === '3M'
+    range === '1M' || range === '3M' || range === 'YTD'
       ? { month: 'short', day: 'numeric' }
       : { month: 'short', year: '2-digit' }
 

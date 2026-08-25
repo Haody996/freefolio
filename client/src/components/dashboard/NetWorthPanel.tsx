@@ -1,17 +1,17 @@
 import NetWorthChart from './NetWorthChart'
 import { fmtUSD, signedUSD, signedPct, mask } from '../../lib/portfolio'
 
-export type Range = '1M' | '3M' | '1Y' | 'ALL'
-const RANGES: Range[] = ['1M', '3M', '1Y', 'ALL']
+export type Range = '1M' | '3M' | 'YTD' | '1Y' | 'ALL'
+const RANGES: Range[] = ['1M', '3M', 'YTD', '1Y', 'ALL']
 // Window by actual elapsed days — works whether history is daily or weekly.
-const RANGE_DAYS: Record<Range, number> = { '1M': 31, '3M': 93, '1Y': 366, ALL: Infinity }
+const RANGE_DAYS: Record<Range, number> = { '1M': 31, '3M': 93, YTD: 0, '1Y': 366, ALL: Infinity }
 
 // Slice the series to the points within `range` of the most recent point,
 // always keeping at least the last two points so the chart can draw.
 function sliceRange(values: number[], dates: Date[], range: Range): { v: number[]; d: Date[] } {
   if (range === 'ALL' || values.length <= 2) return { v: values, d: dates }
   const end = dates[dates.length - 1]?.getTime() ?? Date.now()
-  const cutoff = end - RANGE_DAYS[range] * 86400_000
+  const cutoff = range === 'YTD' ? new Date(new Date().getFullYear(), 0, 1).getTime() : end - RANGE_DAYS[range] * 86400_000
   let from = dates.findIndex((dt) => dt.getTime() >= cutoff)
   if (from < 0) from = 0
   from = Math.min(from, values.length - 2) // guarantee ≥ 2 points
