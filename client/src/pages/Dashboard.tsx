@@ -465,7 +465,7 @@ export default function Dashboard() {
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{mask(fmtUSD(h.value), privacy)}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: h.dayPct >= 0 ? '#22E38A' : '#FF5470' }}>
-                    {signedPct(h.dayPct)} · {pct(h.alloc)}
+                    {signedPct(h.dayPct)} · {mask(signedUSD(h.dayChg), privacy)}
                   </div>
                 </div>
               </div>
@@ -492,7 +492,10 @@ export default function Dashboard() {
                 </div>
               </div>
               <div style={{ textAlign: 'right', fontSize: 14 }}>{fmtUSD(h.price, 2)}</div>
-              <div style={{ textAlign: 'right', fontSize: 14, fontWeight: 600, color: h.dayPct >= 0 ? '#22E38A' : '#FF5470' }}>{signedPct(h.dayPct)}</div>
+              <div style={{ textAlign: 'right', color: h.dayPct >= 0 ? '#22E38A' : '#FF5470' }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{signedPct(h.dayPct)}</div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>{mask(signedUSD(h.dayChg), privacy)}</div>
+              </div>
               <div style={{ textAlign: 'right', fontSize: 14, color: '#C9CDD8' }}>{shares}</div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{mask(fmtUSD(h.value), privacy)}</div>
