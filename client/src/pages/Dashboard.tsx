@@ -190,10 +190,19 @@ export default function Dashboard() {
   const cryptoPct = alloc.find((a) => a.cat === 'CRYPTO')?.pct ?? 0
   const cashSeg = alloc.find((a) => a.cat === 'CASH') ?? { pct: 0, value: 0 }
 
+  // Year-to-date: net worth vs the last data point of the prior year (or the
+  // earliest point if history starts this year).
+  const yearNow = new Date().getFullYear()
+  let ytdBase = values[0]
+  for (let i = 0; i < values.length; i++) if (dates[i].getFullYear() < yearNow) ytdBase = values[i]
+  const ytdChange = totals.total - ytdBase
+  const ytdPct = ytdBase ? ytdChange / ytdBase : 0
+
   const firstName = profileQ.data?.profile?.profile?.firstName || 'there'
 
   const stats = [
     { label: 'Today', value: mask(signedUSD(totals.day), privacy), sub: signedPct(totals.dayPct), color: totals.day >= 0 ? '#22E38A' : '#FF5470' },
+    { label: 'YTD', value: mask(signedUSD(ytdChange), privacy), sub: signedPct(ytdPct), color: ytdChange >= 0 ? '#22E38A' : '#FF5470' },
     { label: '1-Yr Return', value: signedPct(ret1y), sub: 'trailing 12 months', color: ret1y >= 0 ? '#22E38A' : '#FF5470' },
     { label: 'Crypto Exposure', value: pct(cryptoPct), sub: 'of portfolio', color: '#FFB020' },
     { label: 'Cash Buffer', value: pct(cashSeg.pct), sub: mask(fmtCompact(cashSeg.value), privacy), color: '#35A0FF' },
@@ -293,7 +302,7 @@ export default function Dashboard() {
 
         <div style={panel}>
           <div style={panelTitle}>Snapshot</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14 }}>
             {stats.map((s) => (
               <div key={s.label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16 }}>
                 <div style={{ fontSize: 11, letterSpacing: 0.8, color: '#8A90A2', fontWeight: 700, textTransform: 'uppercase' }}>{s.label}</div>
