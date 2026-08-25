@@ -455,6 +455,20 @@ export default function Retirement() {
           </div>
         </div>
 
+        {/* Always-visible overall Monte Carlo success probability */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16, padding: '14px 16px', borderRadius: 14, background: `${successColor}14`, border: `1px solid ${successColor}55` }}>
+          <div style={{ fontFamily: "'Space Grotesk'", fontSize: 36, fontWeight: 700, color: successColor, lineHeight: 1 }}>{pct(backtest.successRate)}</div>
+          <div style={{ minWidth: 160 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Overall success probability</div>
+            <div style={{ fontSize: 12.5, color: '#8A90A2' }}>Chance your plan lasts to age {plan.endAge}, across {backtest.trials.toLocaleString()} simulations.</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 120 }}>
+            <div style={{ height: 8, borderRadius: 6, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(backtest.successRate * 100).toFixed(1)}%`, background: successColor, borderRadius: 6 }} />
+            </div>
+          </div>
+        </div>
+
         {/* Editable starting nest egg (defaults to the projected balance at retirement) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(124,92,255,0.08)', border: '1px solid rgba(124,92,255,0.2)' }}>
           <span style={{ fontSize: 13, color: '#C9CDD8', fontWeight: 600 }}>Starting nest egg at age {plan.retirementAge}:</span>
