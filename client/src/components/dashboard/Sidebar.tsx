@@ -21,12 +21,12 @@ interface GoalProps {
 
 function Logo() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px' }}>
+    <NavLink to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px', color: 'inherit', textDecoration: 'none' }} title="Go to dashboard">
       <svg width="18" height="18" viewBox="0 0 18 18">
         <rect x="9" y="0" width="12.7" height="12.7" transform="rotate(45 9 9)" fill="#22E38A" />
       </svg>
-      <span style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 19, letterSpacing: -0.5 }}>getfreefolio</span>
-    </div>
+      <span style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 19, letterSpacing: -0.5, color: '#F2F4F8' }}>getfreefolio</span>
+    </NavLink>
   )
 }
 
