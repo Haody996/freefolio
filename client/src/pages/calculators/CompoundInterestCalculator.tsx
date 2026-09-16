@@ -56,7 +56,8 @@ export default function CompoundInterestCalculator() {
 
           <section style={panel}>
             <ProjectionChart p={p} />
-            <ChartLegend items={[{ color: '#22E38A', label: 'Balance' }, { color: '#9B7CFF', label: "In today's dollars", dashed: true }, { color: '#5B6172', label: 'Contributions', dashed: true }]} />
+            <ChartLegend items={[{ color: '#22E38A', label: 'Balance (green band = interest earned)' }, { color: '#35A0FF', label: 'Contributions' }, { color: '#9B7CFF', label: "In today's dollars", dashed: true }]} />
+            <div style={{ fontSize: 12, color: '#5B6172', marginTop: 6 }}>Hover or tap the chart to see any year's breakdown.</div>
           </section>
 
           <section style={panel}>
