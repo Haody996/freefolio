@@ -84,5 +84,22 @@ services:
       - redis
     restart: unless-stopped
 
+  # Sends weekly / monthly email digests (needs SMTP_* in .env).
+  digest-worker:
+    build:
+      context: .
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+    command: node dist/workers/digest-worker.js
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://freefolio:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/freefolio
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
 volumes:
   postgres_data:

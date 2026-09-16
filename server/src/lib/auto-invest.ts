@@ -49,21 +49,40 @@ export async function processDueAutoInvest(now = new Date()): Promise<number> {
     let next = h.autoNextAt
     let addedShares = 0
     let runs = 0
+    // Each contribution is logged as a BUY so cost basis and returns track it.
+    const buys: { date: Date; quantity: number }[] = []
     // Advance through any missed periods, bounded to avoid runaway catch-up.
     while (next.getTime() <= now.getTime() && runs < 120) {
-      if (h.price > 0) addedShares += h.autoAmount / h.price
+      if (h.price > 0) {
+        addedShares += h.autoAmount / h.price
+        buys.push({ date: next, quantity: h.autoAmount / h.price })
+      }
       next = nextRun(next, h.autoFrequency)
       runs++
     }
 
-    await prisma.holding.update({
-      where: { id: h.id },
-      data: {
-        quantity: h.quantity + addedShares,
-        autoLastAt: addedShares > 0 ? now : h.autoLastAt,
-        autoNextAt: next,
-      },
-    })
+    await prisma.$transaction([
+      prisma.holding.update({
+        where: { id: h.id },
+        data: {
+          quantity: h.quantity + addedShares,
+          autoLastAt: addedShares > 0 ? now : h.autoLastAt,
+          autoNextAt: next,
+        },
+      }),
+      prisma.transaction.createMany({
+        data: buys.map((b) => ({
+          userId: h.userId,
+          holdingId: h.id,
+          type: 'BUY' as const,
+          quantity: b.quantity,
+          price: h.price,
+          amount: h.autoAmount!,
+          date: b.date,
+          source: 'AUTO_INVEST' as const,
+        })),
+      }),
+    ])
     if (addedShares > 0) applied++
   }
   if (applied > 0) console.log(`[auto-invest] Applied contributions to ${applied} holding(s)`)

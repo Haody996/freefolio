@@ -24,6 +24,7 @@ interface Mover {
 
 async function generate(
   netWorth: number,
+  debts: number,
   dayChg: number,
   dayPct: number,
   movers: Mover[]
@@ -39,6 +40,7 @@ async function generate(
 
   const prompt = [
     `Net worth: $${Math.round(netWorth).toLocaleString()}`,
+    debts > 0 ? `Outstanding debts (already subtracted): $${Math.round(debts).toLocaleString()}` : '',
     `Today's change: ${dayChg >= 0 ? '+' : ''}$${Math.round(dayChg).toLocaleString()} (${dayPct >= 0 ? '+' : ''}${(dayPct * 100).toFixed(2)}%)`,
     up.length ? `Top gainers: ${up.map(fmt).join(', ')}` : '',
     down.length ? `Top decliners: ${down.map(fmt).join(', ')}` : '',
@@ -73,6 +75,7 @@ export async function getInsight(
   if (!refresh && hit && hit.date === date) return { insight: hit.text, asOf: date, cached: true }
 
   const holdings = await prisma.holding.findMany({ where: { userId } })
+  const debts = (await prisma.liability.findMany({ where: { userId }, select: { balance: true } })).reduce((s, l) => s + l.balance, 0)
   let netWorth = 0
   let dayChg = 0
   const movers: Mover[] = []
@@ -84,6 +87,7 @@ export async function getInsight(
     movers.push({ symbol: h.symbol, name: h.name, category: h.category, value, dayChg: chg, dayPct: h.prevClose ? (h.price - h.prevClose) / h.prevClose : 0 })
   }
   const dayPct = netWorth - dayChg ? dayChg / (netWorth - dayChg) : 0
+  netWorth -= debts
 
   if (holdings.length === 0) {
     const text = 'Add a few holdings and I’ll summarize your daily movement and surface quick market insight here every morning.'
@@ -91,7 +95,7 @@ export async function getInsight(
     return { insight: text, asOf: date, cached: false }
   }
 
-  const text = await generate(netWorth, dayChg, dayPct, movers)
+  const text = await generate(netWorth, debts, dayChg, dayPct, movers)
   cache.set(userId, { date, text })
   return { insight: text, asOf: date, cached: false }
 }

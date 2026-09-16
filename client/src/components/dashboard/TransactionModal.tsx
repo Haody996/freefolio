@@ -12,6 +12,12 @@ interface Tx {
   amount: number
   date: string
   affectedCash: boolean
+  source: 'MANUAL' | 'ADD' | 'AUTO_INVEST'
+}
+
+function invalidateAfterTrade(qc: ReturnType<typeof useQueryClient>, holdingId: string) {
+  for (const key of ['holdings', 'networth', 'gains', 'performance']) qc.invalidateQueries({ queryKey: [key] })
+  qc.invalidateQueries({ queryKey: ['transactions', holdingId] })
 }
 
 const inputStyle: React.CSSProperties = {
@@ -77,10 +83,18 @@ export default function TransactionModal({
         cashHoldingId: affectCash && cashTarget !== 'AUTO' ? cashTarget : null,
       })).data,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['holdings'] })
-      qc.invalidateQueries({ queryKey: ['networth'] })
-      qc.invalidateQueries({ queryKey: ['transactions', holding.id] })
+      invalidateAfterTrade(qc, holding.id)
       setQuantity('')
+    },
+  })
+
+  // Undo a mistaken entry (reverses its effect on shares and cash).
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/transactions/${id}`)).data,
+    onSuccess: () => {
+      invalidateAfterTrade(qc, holding.id)
+      setConfirmId(null)
     },
   })
 
@@ -183,8 +197,20 @@ export default function TransactionModal({
                     <span>
                       <b style={{ color: t.type === 'BUY' ? '#22E38A' : '#FF5470' }}>{t.type === 'BUY' ? 'Buy' : 'Sell'}</b> {t.quantity} @ ${t.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                       {t.affectedCash && <span style={{ color: '#35A0FF', fontSize: 11 }}> · cash</span>}
+                      {t.source === 'AUTO_INVEST' && <span style={{ color: '#22E38A', fontSize: 11 }}> · auto</span>}
                     </span>
-                    <span style={{ color: '#8A90A2' }}>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: '#8A90A2' }}>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</span>
+                      {confirmId === t.id ? (
+                        <button onClick={() => remove.mutate(t.id)} disabled={remove.isPending} style={{ border: 'none', background: 'rgba(255,84,112,0.14)', color: '#FF5470', borderRadius: 6, fontSize: 11, fontWeight: 700, padding: '2px 7px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {remove.isPending ? '…' : 'Undo?'}
+                        </button>
+                      ) : (
+                        <button onClick={() => setConfirmId(t.id)} aria-label="Delete transaction" title="Delete — reverses its effect on shares and cash" style={{ border: 'none', background: 'transparent', color: '#5B6172', fontSize: 14, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>
+                          ×
+                        </button>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>

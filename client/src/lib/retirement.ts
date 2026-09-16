@@ -2,8 +2,12 @@
 //
 // Models: 3 tax buckets (pre-tax / Roth / taxable) with tax-efficient withdrawal
 // sequencing, RMDs, Social Security claiming credits, advisory (AUM) fees, an
-// optional spending "smile", a guardrails withdrawal strategy, and a separately-
-// inflating healthcare line.
+// optional spending "smile", a guardrails withdrawal strategy, a separately-
+// inflating healthcare line, and debt payments from the payoff plan.
+
+import { simulatePayoff, annualPayments } from './debts'
+import type { DebtStrategy } from './debts'
+import type { Liability } from './portfolio'
 
 export type WithdrawalStrategy = 'FIXED' | 'GUARDRAILS'
 
@@ -32,6 +36,35 @@ export interface RetirementInput {
   // Bucket split (fractions of the portfolio), derived from the user's holdings.
   preTaxPct: number
   rothPct: number
+  // Debt payoff plan: nominal payments per year from now. While saving, payments
+  // freed by paid-off debts can be redirected into contributions; payments still
+  // due after retiring are added to that year's spending.
+  debtPayments?: number[]
+  debtAnnualBudget?: number
+  redirectDebtPayments?: boolean
+  debtYearOffset?: number // plan starts N years after "now" (retirement analysis)
+}
+
+export interface DebtSchedule {
+  debtPayments: number[]
+  debtAnnualBudget: number
+  redirectDebtPayments: boolean
+  debtFreeMonths: number | null
+}
+
+// The payoff plan (strategy + extra payment from saved settings) as yearly payments.
+export function debtScheduleFromSettings(liabilities: Liability[], s: Record<string, unknown> | undefined): DebtSchedule {
+  const strategy: DebtStrategy = s?.debtStrategy === 'SNOWBALL' ? 'SNOWBALL' : 'AVALANCHE'
+  const extra = Number(s?.debtExtraPayment) || 0
+  const debts = liabilities.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))
+  const plan = simulatePayoff(debts, strategy, extra)
+  const budget = debts.filter((d) => d.balance > 0).reduce((t, d) => t + d.minPayment, 0) + (debts.some((d) => d.balance > 0) ? extra : 0)
+  return {
+    debtPayments: annualPayments(plan),
+    debtAnnualBudget: budget * 12,
+    redirectDebtPayments: s?.redirectDebtPayments !== false,
+    debtFreeMonths: plan.months,
+  }
 }
 
 export interface RetirementYear {
@@ -46,6 +79,8 @@ export interface RetirementYear {
   withdrawalRate: number
   shortage: number
   spend: number
+  contribution: number // incl. redirected debt payments
+  debtPayment: number
 }
 
 export interface RetirementResult {
@@ -95,7 +130,8 @@ export function retirementInputFromSettings(
   s: Record<string, unknown>,
   netWorth: number,
   preTaxPct: number,
-  rothPct: number
+  rothPct: number,
+  debts?: DebtSchedule
 ): RetirementInput {
   const num = (k: string, d: number) => (s[k] == null || isNaN(Number(s[k])) ? d : Number(s[k]))
   return {
@@ -122,6 +158,9 @@ export function retirementInputFromSettings(
     healthcareInflationPct: num('healthcareInflationPct', 5),
     preTaxPct,
     rothPct,
+    debtPayments: debts?.debtPayments,
+    debtAnnualBudget: debts?.debtAnnualBudget,
+    redirectDebtPayments: debts?.redirectDebtPayments,
   }
 }
 
@@ -175,7 +214,7 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
   const hcDrift = 1 + (p.healthcareInflationPct - p.inflationPct) / 100
 
   const series: RetirementYear[] = [
-    { age: p.currentAge, balance: total(), phase: 'accumulate', ss: 0, pension: 0, netWithdrawal: 0, taxes: 0, gross: 0, withdrawalRate: 0, shortage: 0, spend: 0 },
+    { age: p.currentAge, balance: total(), phase: 'accumulate', ss: 0, pension: 0, netWithdrawal: 0, taxes: 0, gross: 0, withdrawalRate: 0, shortage: 0, spend: 0, contribution: 0, debtPayment: 0 },
   ]
   let balanceAtRetirement = total()
   let depletedAge: number | null = null
@@ -186,12 +225,19 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
   let spendFactor = 1
   let prevWR = 0
 
+  // Debt payment due in plan year i (1-based), in today's dollars.
+  const off = p.debtYearOffset ?? 0
+  const deflate = (i: number) => Math.pow(1 + p.inflationPct / 100, i - 1 + off)
+  const debtPaymentAt = (i: number) => (p.debtPayments?.[i - 1 + off] ?? 0) / deflate(i)
+  const debtBudgetAt = (i: number) => (p.debtAnnualBudget ?? 0) / deflate(i)
+
   for (let i = 1; i <= endAge - p.currentAge; i++) {
     const age = p.currentAge + i
     const r = realReturnAt(i)
 
     if (age <= retireAge) {
-      const contrib = p.monthlyContribution * 12
+      const freed = p.redirectDebtPayments ? Math.max(0, debtBudgetAt(i) - debtPaymentAt(i)) : 0
+      const contrib = p.monthlyContribution * 12 + freed
       b.preTax += contrib * preTaxPct
       b.roth += contrib * rothPct
       b.taxable += contrib * taxablePct
@@ -199,7 +245,7 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
       b.roth *= 1 + r
       b.taxable *= 1 + r
       if (age === retireAge) balanceAtRetirement = total()
-      series.push({ age, balance: total(), phase: 'accumulate', ss: 0, pension: 0, netWithdrawal: 0, taxes: 0, gross: 0, withdrawalRate: 0, shortage: 0, spend: 0 })
+      series.push({ age, balance: total(), phase: 'accumulate', ss: 0, pension: 0, netWithdrawal: 0, taxes: 0, gross: 0, withdrawalRate: 0, shortage: 0, spend: 0, contribution: contrib, debtPayment: debtPaymentAt(i) })
       continue
     }
 
@@ -218,7 +264,7 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
     const discretionary = p.annualSpending * smile * (p.withdrawalStrategy === 'GUARDRAILS' ? spendFactor : 1)
     const healthcare = p.healthcareAnnual * Math.pow(hcDrift, yearsIn)
     const vacation = age <= retireAge + p.vacationYears ? p.vacationBudget : 0
-    const spend = discretionary + healthcare + vacation
+    const spend = discretionary + healthcare + vacation + debtPaymentAt(i)
 
     const ss = age >= p.ssStartAge ? adjustedSS : 0
     const pension = age >= p.pensionStartAge ? p.pensionAnnual : 0
@@ -260,7 +306,7 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
     const balNow = total()
     if (balNow <= 0 && depletedAge === null && balanceStart > 0) depletedAge = age
 
-    series.push({ age, balance: Math.max(0, balNow), phase: 'draw', ss, pension, netWithdrawal: gross - taxes, taxes, gross, withdrawalRate, shortage, spend })
+    series.push({ age, balance: Math.max(0, balNow), phase: 'draw', ss, pension, netWithdrawal: gross - taxes, taxes, gross, withdrawalRate, shortage, spend, contribution: 0, debtPayment: debtPaymentAt(i) })
   }
 
   return { series, balanceAtRetirement, endBalance: total(), depletedAge, lifetimeTaxes, adjustedSS }

@@ -8,6 +8,8 @@
     "dev:client": "cd client && npm run dev",
     "worker:prices": "cd server && npm run worker:prices",
     "worker:networth": "cd server && npm run worker:networth",
+    "worker:autoinvest": "cd server && npm run worker:autoinvest",
+    "worker:digest": "cd server && npm run worker:digest",
     "build": "cd client && npm run build",
     "db:migrate": "cd server && npx prisma migrate dev",
     "db:generate": "cd server && npx prisma generate",

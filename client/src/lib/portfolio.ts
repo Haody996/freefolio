@@ -1,7 +1,7 @@
 // Portfolio math, formatters, and chart helpers — ported from the design
 // prototype (`Portfolio Dashboard.dc.html`) so the numbers and visuals match.
 
-export type Category = 'STOCKS' | 'CRYPTO' | 'CASH' | 'BONDS' | 'OTHER'
+export type Category = 'STOCKS' | 'CRYPTO' | 'CASH' | 'BONDS' | 'METALS' | 'REAL_ESTATE' | 'VEHICLE' | 'OTHER'
 
 export type AccountType =
   | 'TAXABLE'
@@ -84,6 +84,10 @@ export interface Holding {
   autoAmount: number | null
   autoFrequency: AutoFrequency | null
   autoNextAt: string | null
+  openingCostPerShare: number | null
+  openingAcquiredAt: string | null
+  providerId: string | null
+  appreciationPct: number | null
 }
 
 export interface TreatmentSegment {
@@ -105,7 +109,9 @@ export interface BrokerageSegment {
 const BROKERAGE_PALETTE = ['#22E38A', '#35A0FF', '#9B7CFF', '#FFB020', '#FF6FB5', '#5AD1C8', '#F5A524', '#7C5CFF', '#FF5470', '#8A90A2']
 
 // Total value grouped by institution / brokerage (blank → "Unassigned").
-export function computeBrokerageBreakdown(holdings: Holding[]): BrokerageSegment[] {
+// Real estate & vehicles aren't held at a brokerage, so they're left out.
+export function computeBrokerageBreakdown(all: Holding[]): BrokerageSegment[] {
+  const holdings = all.filter((h) => isInvestable(h.category))
   const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
   const m = new Map<string, number>()
   for (const h of holdings) {
@@ -118,8 +124,10 @@ export function computeBrokerageBreakdown(holdings: Holding[]): BrokerageSegment
     .filter((s) => s.value > 0)
 }
 
-// Total value grouped by tax treatment (pre-tax / Roth / taxable).
-export function computeTaxBreakdown(holdings: Holding[]): TreatmentSegment[] {
+// Investable value grouped by tax treatment (pre-tax / Roth / taxable). Also
+// drives the retirement sim's withdrawal buckets, so illiquid assets are excluded.
+export function computeTaxBreakdown(all: Holding[]): TreatmentSegment[] {
+  const holdings = all.filter((h) => isInvestable(h.category))
   const total = holdings.reduce((s, h) => s + h.quantity * h.price, 0)
   return TREATMENTS.map((t) => {
     const value = holdings
@@ -151,13 +159,16 @@ export interface AllocSegment {
 }
 
 // Design category → display label + accent color.
-export const CATEGORIES: Category[] = ['STOCKS', 'CRYPTO', 'CASH', 'BONDS', 'OTHER']
+export const CATEGORIES: Category[] = ['STOCKS', 'CRYPTO', 'CASH', 'BONDS', 'METALS', 'REAL_ESTATE', 'VEHICLE', 'OTHER']
 
 export const CAT_LABEL: Record<Category, string> = {
   STOCKS: 'Stocks',
   CRYPTO: 'Crypto',
   CASH: 'Cash',
   BONDS: 'Bonds',
+  METALS: 'Metals',
+  REAL_ESTATE: 'Real estate',
+  VEHICLE: 'Vehicles',
   OTHER: 'Other',
 }
 
@@ -166,15 +177,94 @@ export const CAT_COLOR: Record<Category, string> = {
   CRYPTO: '#FFB020',
   CASH: '#35A0FF',
   BONDS: '#9B7CFF',
+  METALS: '#E8C547',
+  REAL_ESTATE: '#5AD1C8',
+  VEHICLE: '#C084FC',
   OTHER: '#FF6FB5',
+}
+
+// Market-priced categories (live quotes, cost basis, performance). The rest are
+// tracked at a value you enter — or, for real estate & vehicles, an estimate.
+export function isMarketPriced(c: Category): boolean {
+  return c === 'STOCKS' || c === 'CRYPTO' || c === 'BONDS' || c === 'METALS'
+}
+
+// Real estate & vehicles count toward net worth but not investable assets
+// (retirement starting capital, FIRE progress).
+export function isInvestable(c: Category): boolean {
+  return c !== 'REAL_ESTATE' && c !== 'VEHICLE'
+}
+
+export function investableTotal(holdings: Holding[]): number {
+  return holdings.filter((h) => isInvestable(h.category)).reduce((s, h) => s + h.quantity * h.price, 0)
+}
+
+export function isEstimatedAsset(h: Pick<Holding, 'category' | 'appreciationPct' | 'openingCostPerShare' | 'openingAcquiredAt'>): boolean {
+  return (h.category === 'REAL_ESTATE' || h.category === 'VEHICLE') && h.appreciationPct != null && h.openingCostPerShare != null && h.openingAcquiredAt != null
+}
+
+// Precious metals, quantity held in troy ounces and priced per ounce.
+export const METALS: { symbol: string; name: string }[] = [
+  { symbol: 'XAU', name: 'Gold' },
+  { symbol: 'XAG', name: 'Silver' },
+  { symbol: 'XPT', name: 'Platinum' },
+  { symbol: 'XPD', name: 'Palladium' },
+]
+export const METAL_UNITS: { value: 'oz' | 'g' | 'kg'; label: string; toOz: number }[] = [
+  { value: 'oz', label: 'troy oz', toOz: 1 },
+  { value: 'g', label: 'grams', toOz: 1 / 31.1034768 },
+  { value: 'kg', label: 'kilograms', toOz: 1000 / 31.1034768 },
+]
+
+// Unit shown next to a quantity.
+export function quantityUnit(c: Category): string {
+  if (c === 'METALS') return 'oz'
+  if (c === 'CRYPTO') return ''
+  return 'sh'
+}
+
+// ─── Liabilities ─────────────────────────────────────────────────────
+
+export type LiabilityType = 'MORTGAGE' | 'HELOC' | 'AUTO_LOAN' | 'STUDENT_LOAN' | 'CREDIT_CARD' | 'PERSONAL_LOAN' | 'MEDICAL' | 'OTHER'
+
+export interface Liability {
+  id: string
+  name: string
+  type: LiabilityType
+  institution: string
+  balance: number
+  interestRatePct: number
+  minPayment: number
+  holdingId: string | null
+}
+
+export const LIABILITY_TYPES: { value: LiabilityType; label: string; color: string }[] = [
+  { value: 'MORTGAGE', label: 'Mortgage', color: '#5AD1C8' },
+  { value: 'HELOC', label: 'HELOC', color: '#38BDF8' },
+  { value: 'AUTO_LOAN', label: 'Auto loan', color: '#C084FC' },
+  { value: 'STUDENT_LOAN', label: 'Student loan', color: '#35A0FF' },
+  { value: 'CREDIT_CARD', label: 'Credit card', color: '#FF5470' },
+  { value: 'PERSONAL_LOAN', label: 'Personal loan', color: '#FFB020' },
+  { value: 'MEDICAL', label: 'Medical', color: '#FF6FB5' },
+  { value: 'OTHER', label: 'Other', color: '#8A90A2' },
+]
+const LIABILITY_BY_VALUE = new Map(LIABILITY_TYPES.map((t) => [t.value, t]))
+export function liabilityLabel(t: LiabilityType): string {
+  return LIABILITY_BY_VALUE.get(t)?.label ?? 'Other'
+}
+export function liabilityColor(t: LiabilityType): string {
+  return LIABILITY_BY_VALUE.get(t)?.color ?? '#8A90A2'
+}
+export function totalDebt(liabilities: Liability[]): number {
+  return liabilities.reduce((s, l) => s + l.balance, 0)
 }
 
 export function catColor(c: Category): string {
   return CAT_COLOR[c] || '#8A90A2'
 }
 
-// Top-10 crypto by market cap — offered as suggestions in the Add Holding modal.
-// The ticker is stored as the holding symbol; the server maps it to a CoinGecko id.
+// Top-10 crypto by market cap — instant suggestions in the Add Holding modal
+// (the picker also browses the live top 100 and searches every coin).
 export const TOP_CRYPTO: { symbol: string; name: string }[] = [
   { symbol: 'BTC', name: 'Bitcoin' },
   { symbol: 'ETH', name: 'Ethereum' },
@@ -346,14 +436,16 @@ export function fallbackHistory(total: number, points = 156): HistoryPoint[] {
 // ─── Formatters ──────────────────────────────────────────────────────
 
 export function fmtUSD(n: number, d = 0): string {
-  return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+  const sign = n < 0 && Math.abs(n) >= 0.5 * 10 ** -d ? '−' : ''
+  return sign + '$' + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 
 export function fmtCompact(n: number): string {
   const a = Math.abs(n)
-  if (a >= 1e6) return '$' + (n / 1e6).toFixed(a >= 1e7 ? 1 : 2) + 'M'
-  if (a >= 1e3) return '$' + Math.round(n / 1e3) + 'k'
-  return '$' + Math.round(n)
+  const sign = n < 0 && a >= 0.5 ? '−' : ''
+  if (a >= 1e6) return sign + '$' + (a / 1e6).toFixed(a >= 1e7 ? 1 : 2) + 'M'
+  if (a >= 1e3) return sign + '$' + Math.round(a / 1e3) + 'k'
+  return sign + '$' + Math.round(a)
 }
 
 export function signedUSD(n: number): string {

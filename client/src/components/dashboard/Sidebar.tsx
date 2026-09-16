@@ -6,7 +6,10 @@ import EditableNumber from './EditableNumber'
 
 const BASE_NAV: { label: string; to: string }[] = [
   { label: 'Dashboard', to: '/' },
+  { label: 'Performance', to: '/performance' },
+  { label: 'Debts', to: '/debts' },
   { label: 'Retirement', to: '/retirement' },
+  { label: 'Settings', to: '/settings' },
 ]
 function navItems() {
   return isAdmin() ? [...BASE_NAV, { label: 'Admin', to: '/admin' }] : BASE_NAV
@@ -80,7 +83,7 @@ function FireProgress({ netWorth, fireGoal, projectedGoal, goalIsCustom, onSetGo
 
   return (
     <>
-      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }}>FIRE PROGRESS</div>
+      <div style={{ fontSize: 11, letterSpacing: 1, color: '#8A90A2', fontWeight: 700 }} title="Investable assets (excludes real estate & vehicles) vs. your goal">FIRE PROGRESS</div>
       <div style={{ position: 'relative', margin: '10px 0 8px' }}>
         <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
           <div
@@ -134,7 +137,7 @@ export default function Sidebar({ netWorth, onLogout, ...goal }: { netWorth: num
           <Logo />
           {logoutBtn(onLogout, false)}
         </div>
-        <nav style={{ display: 'flex', gap: 6 }}>
+        <nav style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '0 -16px', padding: '0 16px', scrollbarWidth: 'none' }}>
           {navItems().map(({ label, to }) => (
             <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => navStyle(isActive, true)}>
               {label}
@@ -170,6 +173,9 @@ export default function Sidebar({ netWorth, onLogout, ...goal }: { netWorth: num
             {label}
           </NavLink>
         ))}
+        <NavLink to="/calculators" style={{ ...navStyle(false), fontSize: 13, marginTop: 8 }}>
+          Free calculators ↗
+        </NavLink>
       </nav>
 
       <div style={{ marginTop: 'auto', background: '#16181F', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 16 }}>

@@ -83,4 +83,27 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   res.status(201).json({ transaction: tx, newQuantity: newQty })
 })
 
+// DELETE /api/transactions/:id — remove a mistaken entry and undo its effects on
+// the position's share count and (if it moved cash) the cash balance.
+router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  const tx = await prisma.transaction.findFirst({ where: { id: req.params.id as string, userId: req.userId }, include: { holding: true } })
+  if (!tx) {
+    res.status(404).json({ error: 'Transaction not found' })
+    return
+  }
+  const h = tx.holding
+  const newQty = tx.type === 'BUY' ? Math.max(0, h.quantity - tx.quantity) : h.quantity + tx.quantity
+  await prisma.holding.update({ where: { id: h.id }, data: { quantity: newQty } })
+
+  if (tx.affectedCash && tx.cashHoldingId) {
+    const cash = await prisma.holding.findFirst({ where: { id: tx.cashHoldingId, userId: req.userId } })
+    if (cash) {
+      const newCash = tx.type === 'BUY' ? cash.price + tx.amount : Math.max(0, cash.price - tx.amount)
+      await prisma.holding.update({ where: { id: cash.id }, data: { price: newCash, prevClose: newCash } })
+    }
+  }
+  await prisma.transaction.delete({ where: { id: tx.id } })
+  res.json({ ok: true, newQuantity: newQty })
+})
+
 export default router

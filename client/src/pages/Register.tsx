@@ -60,6 +60,9 @@ export default function Register() {
           Log in
         </Link>
       </p>
+      <p style={{ marginTop: 10, textAlign: 'center', fontSize: 13, color: '#8A90A2' }}>
+        Just exploring? Try the <Link to="/calculators">free FIRE calculators</Link>
+      </p>
     </AuthShell>
   )
 }

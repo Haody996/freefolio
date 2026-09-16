@@ -8,9 +8,11 @@ import FanChart from '../components/dashboard/FanChart'
 import YearBars from '../components/dashboard/YearBars'
 import EditableNumber from '../components/dashboard/EditableNumber'
 import NumberInput from '../components/dashboard/NumberInput'
-import { computeTotals, computeTaxBreakdown, fmtUSD, fmtCompact, pct } from '../lib/portfolio'
-import type { Holding } from '../lib/portfolio'
-import { simulateRetirement, backtestRetirement, ssClaimFactor } from '../lib/retirement'
+import { Link } from 'react-router-dom'
+import { investableTotal, computeTaxBreakdown, fmtUSD, fmtCompact, pct, totalDebt } from '../lib/portfolio'
+import type { Holding, Liability } from '../lib/portfolio'
+import { simulateRetirement, backtestRetirement, ssClaimFactor, debtScheduleFromSettings } from '../lib/retirement'
+import { monthsLabel, payoffDate } from '../lib/debts'
 import type { RetirementInput } from '../lib/retirement'
 
 // Bucket split (preTaxPct/rothPct) is derived from holdings, not persisted.
@@ -113,13 +115,13 @@ function AccumulationTable({ plan, result }: { plan: Plan; result: ReturnType<ty
   if (accum.length < 2) {
     return <div style={{ padding: '24px 4px', textAlign: 'center', color: '#8A90A2', fontSize: 13 }}>You're already at (or past) retirement age — no accumulation years to show.</div>
   }
-  const annualContrib = plan.monthlyContribution * 12
+  // Contributions include debt payments redirected into savings once debts are paid off.
   const rows = accum.slice(1).map((s, i) => {
     const startBal = accum[i].balance
     const endBal = s.balance
-    return { age: s.age, contrib: annualContrib, growth: endBal - startBal - annualContrib, endBal }
+    return { age: s.age, contrib: s.contribution, growth: endBal - startBal - s.contribution, endBal }
   })
-  const totalContrib = plan.startingCapital + annualContrib * rows.length
+  const totalContrib = plan.startingCapital + rows.reduce((t, r) => t + r.contrib, 0)
   const totalGrowth = result.balanceAtRetirement - totalContrib
 
   const th: React.CSSProperties = { padding: '6px 10px', textAlign: 'right', fontWeight: 700, position: 'sticky', top: 0, background: '#16181F' }
@@ -185,8 +187,14 @@ export default function Retirement() {
     queryKey: ['projection'],
     queryFn: async () => (await api.get('/projection')).data,
   })
+  const liabilitiesQ = useQuery<{ liabilities: Liability[] }>({
+    queryKey: ['liabilities'],
+    queryFn: async () => (await api.get('/liabilities')).data,
+  })
 
-  const netWorth = computeTotals(holdingsQ.data?.holdings ?? []).total
+  // Starting capital defaults to investable assets (real estate & vehicles excluded).
+  const netWorth = investableTotal(holdingsQ.data?.holdings ?? [])
+  const [redirectDebt, setRedirectDebt] = useState<boolean | null>(null)
 
   // Seed the plan once from saved settings; startingCapital falls back to net worth.
   const settings = settingsQ.data?.settings
@@ -229,7 +237,9 @@ export default function Retirement() {
   const preTaxPct = holdings.length ? breakdown.find((b) => b.treatment === 'PRE_TAX')?.pct ?? 0 : 0.5
   const rothPct = holdings.length ? breakdown.find((b) => b.treatment === 'ROTH')?.pct ?? 0 : 0.2
   const taxablePct = Math.max(0, 1 - preTaxPct - rothPct)
-  const simInput: RetirementInput = { ...plan, preTaxPct, rothPct }
+  const liabilities = liabilitiesQ.data?.liabilities ?? []
+  const schedule = debtScheduleFromSettings(liabilities, { ...settings, ...(redirectDebt != null ? { redirectDebtPayments: redirectDebt } : {}) })
+  const simInput: RetirementInput = { ...plan, preTaxPct, rothPct, ...schedule }
 
   const result = simulateRetirement(simInput)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
@@ -238,7 +248,7 @@ export default function Retirement() {
   // Retirement analysis: stress-test the drawdown from an (editable) starting
   // nest egg, defaulting to the projected balance at retirement.
   const effectiveNestEgg = nestEgg ?? Math.round(result.balanceAtRetirement)
-  const analysisPlan: RetirementInput = { ...simInput, currentAge: plan.retirementAge, startingCapital: effectiveNestEgg, monthlyContribution: 0 }
+  const analysisPlan: RetirementInput = { ...simInput, currentAge: plan.retirementAge, startingCapital: effectiveNestEgg, monthlyContribution: 0, debtYearOffset: yearsToRetire }
   const analysis = simulateRetirement(analysisPlan)
   const backtest = backtestRetirement(analysisPlan)
 
@@ -300,7 +310,7 @@ export default function Retirement() {
           <div style={panel}>
             <div style={groupTitle}>Savings &amp; growth</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Current savings" value={plan.startingCapital} onChange={(n) => update('startingCapital', n)} prefix="$" step={1000} span />
+              <Field label="Current investments" value={plan.startingCapital} onChange={(n) => update('startingCapital', n)} prefix="$" step={1000} span />
               <Field label="Monthly contribution" value={plan.monthlyContribution} onChange={(n) => update('monthlyContribution', n)} prefix="$" step={100} span />
               <Field label="Expected return" value={plan.expectedReturnPct} onChange={(n) => update('expectedReturnPct', n)} suffix="%" step={0.1} />
               <Field label="Inflation" value={plan.inflationPct} onChange={(n) => update('inflationPct', n)} suffix="%" step={0.1} />
@@ -338,6 +348,44 @@ export default function Retirement() {
                 {pct(preTaxPct)} pre-tax · {pct(rothPct)} Roth · {pct(taxablePct)} taxable.
               </div>
             </div>
+          </div>
+
+          <div style={panel}>
+            <div style={{ ...groupTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              Debts
+              <Link to="/debts" style={{ fontSize: 12, fontWeight: 700 }}>
+                {liabilities.length ? 'Payoff planner →' : '+ Add debts'}
+              </Link>
+            </div>
+            {liabilities.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: '#8A90A2', lineHeight: 1.5 }}>No debts tracked. Add a mortgage or loans to model their payments.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, color: '#C9CDD8', lineHeight: 1.55 }}>
+                  <b style={{ color: '#FF5470' }}>{fmtUSD(totalDebt(liabilities))}</b> owed · {fmtUSD(schedule.debtAnnualBudget / 12)}/mo ·{' '}
+                  {schedule.debtFreeMonths == null ? (
+                    <span style={{ color: '#FF5470' }}>payments don't cover interest</span>
+                  ) : (
+                    <>
+                      debt-free <b style={{ color: '#F2F4F8' }}>{payoffDate(schedule.debtFreeMonths)}</b> ({monthsLabel(schedule.debtFreeMonths)}, age {Math.floor(plan.currentAge + schedule.debtFreeMonths / 12)})
+                    </>
+                  )}
+                </div>
+                <Toggle
+                  label="Put paid-off debt payments into savings"
+                  checked={schedule.redirectDebtPayments}
+                  onChange={(v) => {
+                    setRedirectDebt(v)
+                    api.put('/projection', { redirectDebtPayments: v })
+                  }}
+                />
+                <div style={{ fontSize: 12, color: '#8A90A2', lineHeight: 1.5 }}>
+                  {schedule.debtFreeMonths != null && plan.currentAge + schedule.debtFreeMonths / 12 > plan.retirementAge
+                    ? 'Some payments continue after you retire — they’re added to retirement spending, so leave them out of “Annual spending”.'
+                    : 'All debts are paid off before you retire.'}
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={panel}>

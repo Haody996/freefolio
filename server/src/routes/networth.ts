@@ -1,15 +1,14 @@
 import { Router, Response } from 'express'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
 import prisma from '../lib/prisma'
-import { computeNetWorth, snapshotNetWorth, backfillHistory } from '../lib/networth'
+import { computeBalances, snapshotNetWorth, backfillHistory } from '../lib/networth'
 
 const router = Router()
 router.use(authMiddleware)
 
-// GET /api/networth/current — live net worth from current holdings.
+// GET /api/networth/current — live net worth (assets − debts) from current holdings.
 router.get('/current', async (req: AuthRequest, res: Response): Promise<void> => {
-  const netWorth = await computeNetWorth(req.userId!)
-  res.json({ netWorth })
+  res.json(await computeBalances(req.userId!))
 })
 
 // GET /api/networth/history?days=1100 — daily snapshot series for the chart.

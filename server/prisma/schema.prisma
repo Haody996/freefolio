@@ -21,6 +21,11 @@ model User {
   netWorthHistory NetWorthSnapshot[]
   projection      ProjectionSettings?
   transactions    Transaction[]
+  liabilities     Liability[]
+
+  // Email digest (net-worth change, top movers, FIRE progress). Opt-in.
+  digestFrequency DigestFrequency @default(OFF)
+  lastDigestAt    DateTime?
 }
 
 model Profile {
@@ -42,6 +47,9 @@ enum Category {
   CASH
   BONDS
   OTHER
+  METALS      // gold/silver/platinum/palladium — quantity in troy oz, priced per oz
+  REAL_ESTATE // manual value, or estimated from purchase price × appreciation
+  VEHICLE     // manual value, or estimated from purchase price × depreciation
 }
 
 // The account a holding lives in. Determines its tax treatment (see client
@@ -76,6 +84,36 @@ enum TxType {
   SELL
 }
 
+// Where a transaction came from: logged by hand, added via "Add holding" on an
+// existing position, or applied by the auto-invest worker.
+enum TxSource {
+  MANUAL
+  ADD
+  AUTO_INVEST
+}
+
+enum LiabilityType {
+  MORTGAGE
+  HELOC
+  AUTO_LOAN
+  STUDENT_LOAN
+  CREDIT_CARD
+  PERSONAL_LOAN
+  MEDICAL
+  OTHER
+}
+
+enum DebtStrategy {
+  AVALANCHE // highest interest rate first
+  SNOWBALL  // smallest balance first
+}
+
+enum DigestFrequency {
+  OFF
+  WEEKLY
+  MONTHLY
+}
+
 model Holding {
   id          String      @id @default(cuid())
   userId      String
@@ -96,12 +134,27 @@ model Holding {
   autoNextAt    DateTime?
   autoLastAt    DateTime?
 
+  // Cost basis for shares not covered by logged BUY transactions (the "opening
+  // lot"): average cost per unit and approximate acquisition date. Null cost →
+  // basis unknown. For real estate / vehicles these are the purchase price/date.
+  openingCostPerShare Float?
+  openingAcquiredAt   DateTime?
+
+  // Provider-specific market id when the ticker alone is ambiguous (CoinGecko
+  // coin id for crypto, e.g. PEPE → "pepe").
+  providerId String?
+
+  // Real estate / vehicles: annual appreciation % (negative = depreciation).
+  // Non-null → value is estimated from openingCostPerShare + openingAcquiredAt.
+  appreciationPct Float?
+
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   // Same ticker can live in different accounts AND institutions (e.g. VTI in
   // taxable at Schwab + Roth IRA at Fidelity), so uniqueness spans both.
   transactions Transaction[]
+  liabilities  Liability[] // debts secured by this asset (mortgage → house)
 
   @@unique([userId, symbol, accountType, institution])
   @@index([userId])
@@ -123,14 +176,38 @@ model Transaction {
   date         DateTime @default(now())
   affectedCash Boolean  @default(false)
   cashHoldingId String?
+  source       TxSource @default(MANUAL)
   createdAt    DateTime @default(now())
 
   @@index([userId])
   @@index([holdingId])
 }
 
+// ─── Liabilities ─────────────────────────────────────────────────────
+// Debts subtract from net worth. minPayment is the required monthly payment
+// (principal + interest). An optional secured asset (house, car) lets the UI
+// show equity.
+
+model Liability {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  type            LiabilityType @default(OTHER)
+  institution     String        @default("")
+  balance         Float         @default(0)
+  interestRatePct Float         @default(0) // APR
+  minPayment      Float         @default(0) // monthly
+  holdingId       String?
+  holding         Holding?      @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+}
+
 // ─── Net-worth history ───────────────────────────────────────────────
-// One row per user per day (assets only — the design has no liabilities).
+// One row per user per day: assets − liabilities.
 
 model NetWorthSnapshot {
   id        String   @id @default(cuid())
@@ -188,6 +265,11 @@ model ProjectionSettings {
 
   // FIRE goal for the sidebar progress bar (null → default to projected nest egg)
   fireGoal Float?
+
+  // Debt payoff plan — also feeds debt payments into the retirement sim.
+  debtStrategy         DebtStrategy @default(AVALANCHE)
+  debtExtraPayment     Float        @default(0)    // extra $/mo on top of minimums
+  redirectDebtPayments Boolean      @default(true) // paid-off payments → savings
 
   updatedAt DateTime @updatedAt
 }

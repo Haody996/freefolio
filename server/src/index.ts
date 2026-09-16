@@ -12,7 +12,12 @@ import insightsRoutes from './routes/insights'
 import adminRoutes from './routes/admin'
 import transactionsRoutes from './routes/transactions'
 import profileRoutes from './routes/profile'
+import liabilitiesRoutes from './routes/liabilities'
+import gainsRoutes from './routes/gains'
+import performanceRoutes from './routes/performance'
+import digestRoutes from './routes/digest'
 import { initScheduler } from './scheduler'
+import { createIndexRenderer } from './seo'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -31,6 +36,10 @@ app.use('/api/insights', insightsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/transactions', transactionsRoutes)
 app.use('/api/profile', profileRoutes)
+app.use('/api/liabilities', liabilitiesRoutes)
+app.use('/api/gains', gainsRoutes)
+app.use('/api/performance', performanceRoutes)
+app.use('/api/digest', digestRoutes)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -40,8 +49,9 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not foun
 // Serve React build in production — client/dist sits two levels above dist/index.js
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.resolve(__dirname, '../../client/dist')
-  app.use(express.static(clientDist))
-  app.get('*splat', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')))
+  const renderIndex = createIndexRenderer(path.join(clientDist, 'index.html'))
+  app.use(express.static(clientDist, { index: false }))
+  app.get('*splat', (req, res) => res.type('html').send(renderIndex(req.path)))
 }
 
 app.listen(PORT, () => {

@@ -11,7 +11,9 @@ export const connection = new IORedis(process.env.REDIS_URL || 'redis://localhos
 export const QUEUE_PRICES = 'prices'
 export const QUEUE_NETWORTH = 'networth'
 export const QUEUE_AUTOINVEST = 'autoinvest'
+export const QUEUE_DIGEST = 'digest'
 
 export const pricesQueue = new Queue(QUEUE_PRICES, { connection })
 export const netWorthQueue = new Queue(QUEUE_NETWORTH, { connection })
 export const autoInvestQueue = new Queue(QUEUE_AUTOINVEST, { connection })
+export const digestQueue = new Queue(QUEUE_DIGEST, { connection })

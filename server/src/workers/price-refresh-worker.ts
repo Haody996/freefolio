@@ -2,32 +2,32 @@ import 'dotenv/config'
 import { Worker } from 'bullmq'
 import { connection, QUEUE_PRICES } from '../lib/queue'
 import prisma from '../lib/prisma'
-import { getQuote } from '../lib/prices'
-import { Category } from '@prisma/client'
+import { getQuote, assetTypeForCategory } from '../lib/prices'
+import { estimatedPrices } from '../lib/assets'
 
-// Only market-priced categories get live quotes; cash/other are manual.
-function pricedAssetType(cat: Category): 'STOCK' | 'CRYPTO' | null {
-  if (cat === 'CRYPTO') return 'CRYPTO'
-  if (cat === 'STOCKS' || cat === 'BONDS') return 'STOCK'
-  return null
-}
-
-// Pull fresh quotes for every market-priced holding, rolling the old price
-// into prevClose so day-change stays meaningful.
+// Pull fresh quotes for every market-priced holding (the provider's previous
+// close keeps day-change meaningful), and re-value estimated real estate and
+// vehicles along their appreciation curve.
 async function refreshAllPrices(): Promise<number> {
   const holdings = await prisma.holding.findMany({
-    where: { category: { in: ['STOCKS', 'CRYPTO', 'BONDS'] } },
+    where: { category: { in: ['STOCKS', 'CRYPTO', 'BONDS', 'METALS', 'REAL_ESTATE', 'VEHICLE'] } },
   })
   if (holdings.length === 0) {
-    console.log('[price-refresh] No market-priced holdings')
+    console.log('[price-refresh] No priced holdings')
     return 0
   }
 
   let updated = 0
   for (const h of holdings) {
-    const assetType = pricedAssetType(h.category)
+    const est = estimatedPrices(h)
+    if (est) {
+      await prisma.holding.update({ where: { id: h.id }, data: { ...est, quantity: 1 } })
+      updated++
+      continue
+    }
+    const assetType = assetTypeForCategory(h.category)
     if (!assetType) continue
-    const quote = await getQuote(h.symbol, assetType)
+    const quote = await getQuote(h.symbol, assetType, h.providerId)
     if (!quote) continue
     await prisma.holding.update({
       where: { id: h.id },

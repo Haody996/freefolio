@@ -23,9 +23,10 @@ const NUM_FIELDS = [
   'aumFeePct',
   'healthcareAnnual',
   'healthcareInflationPct',
+  'debtExtraPayment',
 ] as const
 const INT_FIELDS = new Set(['currentAge', 'retirementAge', 'endAge', 'vacationYears', 'ssStartAge', 'pensionStartAge'])
-const BOOL_FIELDS = ['spendingSmile', 'applyRmd'] as const
+const BOOL_FIELDS = ['spendingSmile', 'applyRmd', 'redirectDebtPayments'] as const
 
 // GET /api/projection — the saved retirement-plan settings.
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -57,6 +58,9 @@ router.put('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
   if (req.body.withdrawalStrategy === 'FIXED' || req.body.withdrawalStrategy === 'GUARDRAILS') {
     data.withdrawalStrategy = req.body.withdrawalStrategy
+  }
+  if (req.body.debtStrategy === 'AVALANCHE' || req.body.debtStrategy === 'SNOWBALL') {
+    data.debtStrategy = req.body.debtStrategy
   }
 
   const settings = await prisma.projectionSettings.upsert({

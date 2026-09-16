@@ -1,7 +1,7 @@
-import { pricesQueue, netWorthQueue, autoInvestQueue } from './lib/queue'
+import { pricesQueue, netWorthQueue, autoInvestQueue, digestQueue } from './lib/queue'
 
 // Registers repeatable BullMQ jobs. The workers (price-refresh-worker,
-// networth-snapshot-worker) consume these. Repeatable jobs are deduped by key,
+// networth-snapshot-worker, auto-invest-worker, digest-worker) consume these. Repeatable jobs are deduped by key,
 // so calling this on every boot is safe.
 export async function initScheduler(): Promise<void> {
   const priceIntervalMin = Number(process.env.PRICE_REFRESH_INTERVAL_MIN) || 15
@@ -37,6 +37,19 @@ export async function initScheduler(): Promise<void> {
     {
       repeat: { pattern: '5 0 * * *' },
       jobId: 'networth-daily',
+      removeOnComplete: true,
+      removeOnFail: 100,
+    }
+  )
+
+  // Email digests at 14:00 UTC (morning in the US): weekly on Mondays, monthly
+  // on the 1st — the worker decides who is due.
+  await digestQueue.add(
+    'send-due',
+    {},
+    {
+      repeat: { pattern: '0 14 * * *' },
+      jobId: 'digest-daily',
       removeOnComplete: true,
       removeOnFail: 100,
     }

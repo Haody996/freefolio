@@ -30,8 +30,10 @@ router.get('/users', async (_req: AuthRequest, res: Response): Promise<void> => 
   })
 
   const holdings = await prisma.holding.findMany({ select: { userId: true, quantity: true, price: true } })
+  const liabilities = await prisma.liability.findMany({ select: { userId: true, balance: true } })
   const nwByUser = new Map<string, number>()
   for (const h of holdings) nwByUser.set(h.userId, (nwByUser.get(h.userId) || 0) + h.quantity * h.price)
+  for (const l of liabilities) nwByUser.set(l.userId, (nwByUser.get(l.userId) || 0) - l.balance)
 
   res.json({
     users: users.map((u) => ({

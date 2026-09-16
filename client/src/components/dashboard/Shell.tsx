@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 import { clearAuth } from '../../lib/auth'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { computeTotals, computeTaxBreakdown } from '../../lib/portfolio'
-import type { Holding } from '../../lib/portfolio'
-import { simulateRetirement, retirementInputFromSettings } from '../../lib/retirement'
+import { investableTotal, computeTaxBreakdown } from '../../lib/portfolio'
+import type { Holding, Liability } from '../../lib/portfolio'
+import { simulateRetirement, retirementInputFromSettings, debtScheduleFromSettings } from '../../lib/retirement'
 import Sidebar from './Sidebar'
 
 // App chrome shared by all authenticated pages: sidebar + main content area.
@@ -23,8 +23,15 @@ export default function Shell() {
     queryFn: async () => (await api.get('/projection')).data,
   })
 
+  const liabilitiesQ = useQuery<{ liabilities: Liability[] }>({
+    queryKey: ['liabilities'],
+    queryFn: async () => (await api.get('/liabilities')).data,
+  })
+
+  // FIRE progress tracks investable assets (real estate & vehicles excluded);
+  // debts enter the projection through their payments.
   const holdings = holdingsQ.data?.holdings ?? []
-  const netWorth = computeTotals(holdings).total
+  const netWorth = investableTotal(holdings)
 
   // The FIRE goal defaults to the projected nest egg at retirement (from the
   // saved plan), or the user's explicit fireGoal override.
@@ -32,7 +39,8 @@ export default function Shell() {
   const breakdown = computeTaxBreakdown(holdings)
   const preTaxPct = holdings.length ? breakdown.find((b) => b.treatment === 'PRE_TAX')?.pct ?? 0 : 0.5
   const rothPct = holdings.length ? breakdown.find((b) => b.treatment === 'ROTH')?.pct ?? 0 : 0.2
-  const projectedGoal = s ? simulateRetirement(retirementInputFromSettings(s, netWorth, preTaxPct, rothPct)).balanceAtRetirement : 1_500_000
+  const debts = debtScheduleFromSettings(liabilitiesQ.data?.liabilities ?? [], s)
+  const projectedGoal = s ? simulateRetirement(retirementInputFromSettings(s, netWorth, preTaxPct, rothPct, debts)).balanceAtRetirement : 1_500_000
   const fireGoal = s && s.fireGoal != null ? Number(s.fireGoal) : projectedGoal
 
   async function setFireGoal(value: number | null) {

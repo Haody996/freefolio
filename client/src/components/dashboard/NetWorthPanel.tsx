@@ -1,5 +1,6 @@
 import NetWorthChart from './NetWorthChart'
-import { fmtUSD, signedUSD, signedPct, mask } from '../../lib/portfolio'
+import { Link } from 'react-router-dom'
+import { fmtUSD, fmtCompact, signedUSD, signedPct, mask } from '../../lib/portfolio'
 
 export type Range = '1M' | '3M' | 'YTD' | '1Y' | 'ALL'
 const RANGES: Range[] = ['1M', '3M', 'YTD', '1Y', 'ALL']
@@ -22,6 +23,8 @@ export default function NetWorthPanel({
   values,
   dates,
   total,
+  assets,
+  debts,
   day,
   dayPct,
   privacy,
@@ -33,6 +36,8 @@ export default function NetWorthPanel({
   values: number[]
   dates: Date[]
   total: number
+  assets?: number // shown with debts when the user has any
+  debts?: number
   day: number
   dayPct: number
   privacy: boolean
@@ -66,6 +71,14 @@ export default function NetWorthPanel({
             {mask(`${signedUSD(day)}  (${signedPct(dayPct)})`, privacy)}{' '}
             <span style={{ color: '#8A90A2', fontWeight: 500 }}>today</span>
           </div>
+          {assets != null && debts != null && (
+            <div style={{ fontSize: 12.5, color: '#8A90A2', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
+              Assets <b style={{ color: '#C9CDD8' }}>{mask(fmtCompact(assets), privacy)}</b> ·{' '}
+              <Link to="/debts" style={{ color: '#8A90A2' }}>
+                Debts <b style={{ color: '#FF5470' }}>{mask('−' + fmtCompact(debts), privacy)}</b>
+              </Link>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

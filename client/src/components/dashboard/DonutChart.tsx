@@ -5,10 +5,12 @@ export default function DonutChart({
   slices,
   total,
   privacy,
+  label = 'NET WORTH',
 }: {
   slices: AllocSlice[]
   total: number
   privacy: boolean
+  label?: string
 }) {
   const sz = 190
   const cx = 95
@@ -44,7 +46,7 @@ export default function DonutChart({
         {mask(fmtCompact(total), privacy)}
       </text>
       <text x={cx} y={cy + 16} textAnchor="middle" fill="#8A90A2" fontSize={10} letterSpacing={1.5}>
-        NET WORTH
+        {label}
       </text>
     </svg>
   )
