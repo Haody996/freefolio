@@ -287,6 +287,54 @@ export async function getHistory(
   return (opts.adjusted ? series.adjusted : series.close).filter((p) => p.date >= cutoff)
 }
 
+// ─── Intraday prices (1-day net-worth chart) ─────────────────────────
+
+export interface IntradayPoint {
+  t: number // epoch ms
+  price: number
+}
+
+const INTRADAY_TTL = 5 * 60 * 1000
+const intradayCache = new Map<string, { at: number; points: IntradayPoint[] }>()
+
+// 5-minute prices: the latest trading session for stocks/ETFs/metals (Yahoo),
+// the last 24 hours for crypto (CoinGecko). Cached for 5 minutes per series.
+export async function getIntraday(symbol: string, assetType: AssetTypeLike, providerId?: string | null): Promise<IntradayPoint[]> {
+  const key = assetType === 'CRYPTO' ? `crypto:${cryptoId(symbol, providerId)}` : `yahoo:${yahooSymbol(symbol, assetType)}`
+  const hit = intradayCache.get(key)
+  if (hit && Date.now() - hit.at < INTRADAY_TTL) return hit.points
+
+  let points: IntradayPoint[] | null = null
+  try {
+    if (assetType === 'CRYPTO') {
+      const { data } = await axios.get(`${COINGECKO_BASE}/coins/${encodeURIComponent(cryptoId(symbol, providerId))}/market_chart`, {
+        params: { vs_currency: 'usd', days: 1 },
+        timeout: 10000,
+      })
+      points = ((data?.prices || []) as [number, number][]).filter(([, p]) => typeof p === 'number').map(([t, price]) => ({ t, price }))
+    } else {
+      const { data } = await axios.get(`${YAHOO_BASE}/${encodeURIComponent(yahooSymbol(symbol, assetType))}`, {
+        params: { range: '1d', interval: '5m' },
+        headers: YAHOO_HEADERS,
+        timeout: 10000,
+      })
+      const result = data?.chart?.result?.[0]
+      const ts: number[] = result?.timestamp || []
+      const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || []
+      points = []
+      ts.forEach((t, i) => {
+        const c = closes[i]
+        if (typeof c === 'number') points!.push({ t: t * 1000, price: c })
+      })
+    }
+  } catch (err) {
+    console.error(`[prices] intraday failed for ${symbol}:`, String(err))
+  }
+  if (!points) return hit?.points ?? [] // serve stale on failure
+  intradayCache.set(key, { at: Date.now(), points })
+  return points
+}
+
 // Run async tasks with bounded concurrency (keeps provider rate limits happy).
 export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length)

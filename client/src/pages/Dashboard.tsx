@@ -125,6 +125,16 @@ export default function Dashboard() {
     retry: 0,
   })
 
+  // Intraday series for the 1D range — fetched only while it's selected.
+  const intradayQ = useQuery<{ points: { date: string; netWorth: number }[] }>({
+    queryKey: ['networth', 'intraday'],
+    queryFn: async () => (await api.get('/networth/intraday')).data,
+    enabled: range === '1D',
+    refetchInterval: range === '1D' ? 5 * 60 * 1000 : false,
+    staleTime: 60 * 1000,
+    retry: 0,
+  })
+
   const holdings = holdingsQ.data?.holdings ?? []
   const liabilities = liabilitiesQ.data?.liabilities ?? []
   const totals = computeTotals(holdings)
@@ -234,6 +244,12 @@ export default function Dashboard() {
   const values = hist.map((h) => h.value)
   const dates = hist.map((h) => h.date)
 
+  // Chart series: daily history, or today's intraday path (last point = live net worth).
+  const intraday = (intradayQ.data?.points ?? []).map((p) => ({ date: new Date(p.date), value: p.netWorth }))
+  if (intraday.length >= 2) intraday[intraday.length - 1] = { date: new Date(), value: netWorth }
+  const chart = range === '1D' ? intraday : hist
+  const chartStatus = range !== '1D' ? undefined : intradayQ.isLoading ? 'loading' : intraday.length < 2 ? 'error' : undefined
+
   // 1-year return is time-weighted on investments, so deposits don't count as growth.
   const ret1y = perfQ.data?.periods.find((p) => p.period === '1Y')?.twr ?? null
   const bench1y = perfQ.data?.periods.find((p) => p.period === '1Y')?.benchmark ?? null
@@ -310,8 +326,9 @@ export default function Dashboard() {
 
       {/* Net worth */}
       <NetWorthPanel
-        values={values}
-        dates={dates}
+        values={chart.map((h) => h.value)}
+        dates={chart.map((h) => h.date)}
+        chartStatus={chartStatus}
         total={netWorth}
         assets={debt > 0 ? totals.total : undefined}
         debts={debt > 0 ? debt : undefined}

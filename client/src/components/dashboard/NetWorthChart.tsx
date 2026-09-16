@@ -76,13 +76,21 @@ export default function NetWorthChart({
     dragging.current = false
   }
 
+  // 1D: times of day, with the weekday when the window spans several days
+  // (e.g. a weekend reaching back to Friday's session).
+  const intraday = range === '1D'
+  const multiDay = intraday && dates[dates.length - 1].getTime() - dates[0].getTime() > 26 * 3600_000
+
   // Tooltip date: precise (day-level), with year on longer ranges.
   const fmtDate = (d: Date) =>
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: range === 'ALL' || range === '1Y' ? '2-digit' : undefined })
+    intraday
+      ? d.toLocaleString('en-US', { weekday: multiDay ? 'short' : undefined, hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: range === 'ALL' || range === '1Y' ? '2-digit' : undefined })
 
-  // Axis label format: day-level for short ranges, month/year for long ones.
-  const axisFmt: Intl.DateTimeFormatOptions =
-    range === '1M' || range === '3M' || range === 'YTD'
+  // Axis label format: time for 1D, day-level for short ranges, month/year for long ones.
+  const axisFmt: Intl.DateTimeFormatOptions = intraday
+    ? { weekday: multiDay ? 'short' : undefined, hour: 'numeric', minute: multiDay ? undefined : '2-digit' }
+    : range === '1M' || range === '3M' || range === 'YTD'
       ? { month: 'short', day: 'numeric' }
       : { month: 'short', year: '2-digit' }
 
@@ -91,7 +99,7 @@ export default function NetWorthChart({
     const dd = dates[idx]
     return (
       <text key={`x${k}`} x={sc.x(idx)} y={H - 6} textAnchor={k === 0 ? 'start' : k === 4 ? 'end' : 'middle'} fill="#8A90A2" fontSize={11}>
-        {dd.toLocaleDateString('en-US', axisFmt)}
+        {intraday ? dd.toLocaleString('en-US', axisFmt) : dd.toLocaleDateString('en-US', axisFmt)}
       </text>
     )
   })

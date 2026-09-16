@@ -1,5 +1,5 @@
 import prisma from './prisma'
-import { getHistory, assetTypeForCategory, mapLimit } from './prices'
+import { getHistory, getIntraday, assetTypeForCategory, mapLimit } from './prices'
 import { NON_INVESTABLE, isEstimated, estimateValue } from './assets'
 
 export interface Balances {
@@ -111,4 +111,61 @@ export async function snapshotNetWorth(userId: string): Promise<number> {
     update: { netWorth },
   })
   return netWorth
+}
+
+// ─── Intraday (1-day chart) ──────────────────────────────────────────
+
+const STEP = 5 * 60 * 1000
+const MAX_LOOKBACK = 4 * 86_400_000
+
+// Net worth through the current day on a 5-minute grid, reconciled with the
+// dashboard's "today" change: it starts at Σ quantity × previous close − debts
+// and ends at the live net worth. Market-priced holdings follow their intraday
+// prices (holding at the previous close until their session's first bar); other
+// assets move linearly from previous close to current value; debts are flat.
+// The window runs from the earliest bar — so over a weekend it spans back to the
+// last stock session, matching what "today" compares against.
+export async function intradayNetWorth(userId: string, now: Date = new Date()): Promise<{ t: number; netWorth: number }[]> {
+  const [holdings, liabilities] = await Promise.all([
+    prisma.holding.findMany({ where: { userId } }),
+    prisma.liability.findMany({ where: { userId }, select: { balance: true } }),
+  ])
+  const debt = liabilities.reduce((s, l) => s + l.balance, 0)
+  const end = now.getTime()
+
+  const priced = holdings.filter((h) => h.quantity > 0 && assetTypeForCategory(h.category) && !isEstimated(h))
+  const series = await mapLimit(priced, 4, async (h) =>
+    (await getIntraday(h.symbol, assetTypeForCategory(h.category)!, h.providerId)).filter((p) => p.t <= end && p.t >= end - MAX_LOOKBACK)
+  )
+  const withData = new Map(priced.map((h, i) => [h.id, series[i]]).filter(([, pts]) => (pts as unknown[]).length > 0) as [string, { t: number; price: number }[]][])
+
+  const firstBar = Math.min(...[...withData.values()].map((pts) => pts[0].t))
+  const start = isFinite(firstBar) ? Math.floor(firstBar / STEP) * STEP - STEP : end - 86_400_000
+
+  const grid = new Set<number>()
+  for (const pts of withData.values()) for (const p of pts) grid.add(Math.floor(p.t / STEP) * STEP)
+  const times = [start, ...[...grid].filter((t) => t > start && t < end).sort((a, b) => a - b), end]
+
+  const cursor = new Map<string, number>()
+  return times.map((t, k) => {
+    const last = k === times.length - 1
+    const frac = end > start ? (t - start) / (end - start) : 1
+    let total = -debt
+    for (const h of holdings) {
+      const pts = withData.get(h.id)
+      if (last) {
+        total += h.quantity * h.price
+      } else if (k === 0) {
+        total += h.quantity * h.prevClose
+      } else if (pts) {
+        let j = cursor.get(h.id) ?? -1
+        while (j + 1 < pts.length && pts[j + 1].t < t + STEP) j++
+        cursor.set(h.id, j)
+        total += h.quantity * (j >= 0 ? pts[j].price : h.prevClose)
+      } else {
+        total += h.quantity * (h.prevClose + (h.price - h.prevClose) * frac)
+      }
+    }
+    return { t, netWorth: total }
+  })
 }

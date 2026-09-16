@@ -1,7 +1,7 @@
 import { Router, Response } from 'express'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
 import prisma from '../lib/prisma'
-import { computeBalances, snapshotNetWorth, backfillHistory } from '../lib/networth'
+import { computeBalances, snapshotNetWorth, backfillHistory, intradayNetWorth } from '../lib/networth'
 
 const router = Router()
 router.use(authMiddleware)
@@ -23,6 +23,17 @@ router.get('/history', async (req: AuthRequest, res: Response): Promise<void> =>
     select: { date: true, netWorth: true },
   })
   res.json({ history })
+})
+
+// GET /api/networth/intraday — net worth through the day on a 5-minute grid.
+router.get('/intraday', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const points = await intradayNetWorth(req.userId!)
+    res.json({ points: points.map((p) => ({ date: new Date(p.t).toISOString(), netWorth: p.netWorth })) })
+  } catch (err) {
+    console.error('[networth] intraday failed:', String(err))
+    res.status(503).json({ error: 'Intraday data is unavailable right now.' })
+  }
 })
 
 // POST /api/networth/snapshot — recompute and store today's snapshot now.

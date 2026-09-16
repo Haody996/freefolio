@@ -1,16 +1,18 @@
 import NetWorthChart from './NetWorthChart'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { Link } from 'react-router-dom'
 import { fmtUSD, fmtCompact, signedUSD, signedPct, mask } from '../../lib/portfolio'
 
-export type Range = '1M' | '3M' | 'YTD' | '1Y' | 'ALL'
-const RANGES: Range[] = ['1M', '3M', 'YTD', '1Y', 'ALL']
+export type Range = '1D' | '1M' | '3M' | 'YTD' | '1Y' | 'ALL'
+const RANGES: Range[] = ['1D', '1M', '3M', 'YTD', '1Y', 'ALL']
 // Window by actual elapsed days — works whether history is daily or weekly.
-const RANGE_DAYS: Record<Range, number> = { '1M': 31, '3M': 93, YTD: 0, '1Y': 366, ALL: Infinity }
+const RANGE_DAYS: Record<Range, number> = { '1D': 1, '1M': 31, '3M': 93, YTD: 0, '1Y': 366, ALL: Infinity }
 
 // Slice the series to the points within `range` of the most recent point,
 // always keeping at least the last two points so the chart can draw.
 function sliceRange(values: number[], dates: Date[], range: Range): { v: number[]; d: Date[] } {
-  if (range === 'ALL' || values.length <= 2) return { v: values, d: dates }
+  // 1D arrives as its own intraday series, already windowed.
+  if (range === 'ALL' || range === '1D' || values.length <= 2) return { v: values, d: dates }
   const end = dates[dates.length - 1]?.getTime() ?? Date.now()
   const cutoff = range === 'YTD' ? new Date(new Date().getFullYear(), 0, 1).getTime() : end - RANGE_DAYS[range] * 86400_000
   let from = dates.findIndex((dt) => dt.getTime() >= cutoff)
@@ -32,6 +34,7 @@ export default function NetWorthPanel({
   onRange,
   onSyncHistory,
   syncingHistory,
+  chartStatus,
 }: {
   values: number[]
   dates: Date[]
@@ -45,7 +48,9 @@ export default function NetWorthPanel({
   onRange: (r: Range) => void
   onSyncHistory?: () => void
   syncingHistory?: boolean
+  chartStatus?: 'loading' | 'error' // for the intraday (1D) series
 }) {
+  const isMobile = useIsMobile()
   const { v, d } = sliceRange(values, dates, range)
   const dayColor = day >= 0 ? '#22E38A' : '#FF5470'
 
@@ -81,7 +86,7 @@ export default function NetWorthPanel({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
           {onSyncHistory && (
             <button
               onClick={onSyncHistory}
@@ -103,13 +108,14 @@ export default function NetWorthPanel({
               {syncingHistory ? 'Syncing…' : '↻ Real history'}
             </button>
           )}
-          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 11 }}>
+          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 11, flex: isMobile ? '1 1 100%' : undefined }}>
             {RANGES.map((r) => (
             <button
               key={r}
               onClick={() => onRange(r)}
               style={{
-                padding: '6px 14px',
+                padding: isMobile ? '6px 0' : '6px 14px',
+                flex: isMobile ? 1 : undefined,
                 borderRadius: 8,
                 border: 'none',
                 cursor: 'pointer',
@@ -127,7 +133,13 @@ export default function NetWorthPanel({
         </div>
       </div>
       <div style={{ marginTop: 10 }}>
-        <NetWorthChart values={v} dates={d} range={range} />
+        {chartStatus ? (
+          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8A90A2', fontSize: 13 }}>
+            {chartStatus === 'loading' ? 'Loading today’s prices…' : 'Intraday prices are unavailable right now — try again in a few minutes.'}
+          </div>
+        ) : (
+          <NetWorthChart values={v} dates={d} range={range} />
+        )}
       </div>
     </section>
   )
