@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import PublicShell, { SignupCta, Explainer } from '../../components/public/PublicShell'
 import CalcField from '../../components/public/CalcField'
-import LineChart, { ChartLegend } from '../../components/dashboard/LineChart'
+import { ChartLegend } from '../../components/dashboard/LineChart'
+import GrowthChart, { Row } from '../../components/dashboard/GrowthChart'
 import { computeFire, fireNumber } from '../../lib/calculators'
 import { monthsLabel } from '../../lib/debts'
 import { fmtUSD, fmtCompact } from '../../lib/portfolio'
@@ -26,6 +27,9 @@ export default function FireCalculator() {
   })
   const set = (k: keyof typeof inp) => (n: number) => setInp((p) => ({ ...p, [k]: n }))
   const r = computeFire(inp)
+  // Cumulative money put in by each age (today's dollars), for the chart breakdown.
+  const contributions = r.ages.map((_, k) => inp.currentSavings + inp.monthlySavings * 12 * k)
+  const thisYear = new Date().getFullYear()
 
   const whatIf = [0, 500, 1000, 2000].map((extra) => {
     const x = computeFire({ ...inp, monthlySavings: inp.monthlySavings + extra })
@@ -79,15 +83,26 @@ export default function FireCalculator() {
 
           <section style={panel}>
             <div style={{ fontFamily: "'Space Grotesk'", fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Portfolio by age</div>
-            <LineChart
-              series={[{ key: 'b', label: 'Portfolio', color: '#22E38A', values: r.balances, area: true }]}
-              labels={r.ages.map((a) => `Age ${a}`)}
-              tickFormat={(i) => String(r.ages[i] ?? '')}
-              yFormat={fmtCompact}
-              refLines={[{ value: r.fireNumber, label: `FIRE number ${fmtCompact(r.fireNumber)}`, color: '#FF7A00' }]}
-              zeroBased
+            <GrowthChart
+              balances={r.balances}
+              contributions={contributions}
+              startAmount={inp.currentSavings}
+              tickLabel={(i) => String(r.ages[i] ?? '')}
+              pointLabel={(i) => `${i === 0 ? 'Today' : `Age ${r.ages[i]}`} · ${thisYear + i}`}
+              refLine={{ value: r.fireNumber, label: `FIRE number ${fmtCompact(r.fireNumber)}`, color: '#FF7A00' }}
+              extraRows={(i) => {
+                const progress = r.balances[i] / r.fireNumber
+                return (
+                  <>
+                    <Row label="FIRE progress" value={progress >= 1 ? '✓ Independent' : `${(progress * 100).toFixed(0)}%`} color={progress >= 1 ? '#22E38A' : '#FF7A00'} dot="#FF7A00" />
+                    <Row label={`Safe income (${inp.withdrawalRatePct}%)`} value={`${fmtUSD((r.balances[i] * inp.withdrawalRatePct) / 100)}/yr`} color="#C9CDD8" dot="#8A90A2" />
+                  </>
+                )
+              }}
+              ariaLabel={`Portfolio growing to ${fmtUSD(r.balances[r.balances.length - 1])} by age ${r.ages[r.ages.length - 1]}; FIRE number ${fmtUSD(r.fireNumber)}.`}
             />
-            <ChartLegend items={[{ color: '#22E38A', label: `Portfolio (${r.realReturnPct.toFixed(1)}% real return)` }, { color: '#FF7A00', label: 'FIRE number', dashed: true }]} />
+            <ChartLegend items={[{ color: '#22E38A', label: `Balance (${r.realReturnPct.toFixed(1)}% real return; green band = interest)` }, { color: '#35A0FF', label: 'Contributions' }, { color: '#FF7A00', label: 'FIRE number', dashed: true }]} />
+            <div style={{ fontSize: 12, color: '#5B6172', marginTop: 6 }}>Hover or tap the chart to see any age's breakdown. All values in today's dollars.</div>
           </section>
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import PublicShell, { SignupCta, Explainer } from '../../components/public/PublicShell'
 import CalcField from '../../components/public/CalcField'
-import LineChart, { ChartLegend } from '../../components/dashboard/LineChart'
-import { computeCoast } from '../../lib/calculators'
+import { ChartLegend } from '../../components/dashboard/LineChart'
+import GrowthChart, { Row } from '../../components/dashboard/GrowthChart'
+import { computeCoast, realReturn } from '../../lib/calculators'
 import { fmtUSD, fmtCompact } from '../../lib/portfolio'
 import { CALCULATOR_PAGES } from '../../lib/calculatorPages'
 import { useSeo } from '../../lib/useSeo'
@@ -26,6 +27,10 @@ export default function CoastFireCalculator() {
   })
   const set = (k: keyof typeof inp) => (n: number) => setInp((p) => ({ ...p, [k]: n }))
   const r = computeCoast(inp)
+  // Cumulative money put in by each age (today's dollars), for the chart breakdown.
+  const contributions = r.ages.map((_, k) => inp.currentSavings + inp.monthlySavings * 12 * k)
+  const real = realReturn(inp.expectedReturnPct, inp.inflationPct)
+  const thisYear = new Date().getFullYear()
 
   return (
     <PublicShell>
@@ -90,17 +95,28 @@ export default function CoastFireCalculator() {
 
           <section style={panel}>
             <div style={{ fontFamily: "'Space Grotesk'", fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Coast number vs. your portfolio</div>
-            <LineChart
-              series={[
-                { key: 'req', label: 'Needed to coast', color: '#FFB020', values: r.required, dashed: true },
-                { key: 'bal', label: 'Your portfolio', color: '#22E38A', values: r.projected, area: true },
-              ]}
-              labels={r.ages.map((a) => `Age ${a}`)}
-              tickFormat={(i) => String(r.ages[i] ?? '')}
-              yFormat={fmtCompact}
-              zeroBased
+            <GrowthChart
+              balances={r.projected}
+              contributions={contributions}
+              startAmount={inp.currentSavings}
+              lines={[{ label: 'Needed to coast', color: '#FFB020', values: r.required, dashed: true }]}
+              tickLabel={(i) => String(r.ages[i] ?? '')}
+              pointLabel={(i) => `${i === 0 ? 'Today' : `Age ${r.ages[i]}`} · ${thisYear + i}`}
+              extraRows={(i) => {
+                const gap = r.projected[i] - r.required[i]
+                const coasted = r.projected[i] * Math.pow(1 + real, Math.max(0, inp.retirementAge - r.ages[i]))
+                return (
+                  <>
+                    <Row label="Needed to coast" value={fmtUSD(r.required[i])} color="#FFB020" dot="#FFB020" />
+                    <Row label={gap >= 0 ? 'Ahead by' : 'Short by'} value={fmtUSD(Math.abs(gap))} color={gap >= 0 ? '#22E38A' : '#FF5470'} dot={gap >= 0 ? '#22E38A' : '#FF5470'} />
+                    <Row label={`Stop saving → at ${inp.retirementAge}`} value={fmtUSD(coasted)} color="#C9CDD8" dot="#8A90A2" />
+                  </>
+                )
+              }}
+              ariaLabel={`Portfolio growing to ${fmtUSD(r.projected[r.projected.length - 1])} by age ${inp.retirementAge}; coast number today ${fmtUSD(r.coastNumber)}.`}
             />
-            <ChartLegend items={[{ color: '#22E38A', label: 'Your portfolio, still saving' }, { color: '#FFB020', label: 'Needed to coast from that age', dashed: true }]} />
+            <ChartLegend items={[{ color: '#22E38A', label: 'Balance, still saving (green band = interest)' }, { color: '#35A0FF', label: 'Contributions' }, { color: '#FFB020', label: 'Needed to coast from that age', dashed: true }]} />
+            <div style={{ fontSize: 12, color: '#5B6172', marginTop: 6 }}>Hover or tap the chart to see any age's breakdown. All values in today's dollars.</div>
           </section>
         </div>
       </div>

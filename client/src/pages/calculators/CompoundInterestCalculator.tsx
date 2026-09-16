@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import PublicShell, { SignupCta, Explainer } from '../../components/public/PublicShell'
 import CalcField from '../../components/public/CalcField'
-import ProjectionChart from '../../components/dashboard/ProjectionChart'
+import GrowthChart, { Row, REAL } from '../../components/dashboard/GrowthChart'
 import { ChartLegend } from '../../components/dashboard/LineChart'
 import { computeProjection, fmtUSD, fmtCompact } from '../../lib/portfolio'
 import { CALCULATOR_PAGES } from '../../lib/calculatorPages'
@@ -55,7 +55,16 @@ export default function CompoundInterestCalculator() {
           </div>
 
           <section style={panel}>
-            <ProjectionChart p={p} />
+            <GrowthChart
+              balances={p.nominal}
+              contributions={p.contributed}
+              startAmount={p.start}
+              lines={[{ label: "In today's dollars", color: REAL, values: p.real, dashed: true }]}
+              tickLabel={(i) => `${i}y`}
+              pointLabel={(i) => `${i === 0 ? 'Today' : `Year ${i}`} · ${new Date().getFullYear() + i}`}
+              extraRows={(i) => <Row label="In today's dollars" value={fmtUSD(p.real[i])} color={REAL} dot={REAL} />}
+              ariaLabel={`Growth over ${p.years} years to ${fmtUSD(p.finalNom)}.`}
+            />
             <ChartLegend items={[{ color: '#22E38A', label: 'Balance (green band = interest earned)' }, { color: '#35A0FF', label: 'Contributions' }, { color: '#9B7CFF', label: "In today's dollars", dashed: true }]} />
             <div style={{ fontSize: 12, color: '#5B6172', marginTop: 6 }}>Hover or tap the chart to see any year's breakdown.</div>
           </section>

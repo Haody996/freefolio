@@ -80,12 +80,21 @@ npm run worker:digest                         # (optional) email digest worker (
 
 Market data (quotes + history) needs no API keys. Google sign-in needs `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID`. AI insights need `GEMINI_API_KEY`. The email digest needs `SMTP_HOST` (+ `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`); without it the digest worker skips sending and Settings shows that email isn't switched on.
 
+## Tests
+
+```bash
+npm test          # server + client: type-check, then Vitest
+cd server && npx vitest        # watch mode
+```
+
+Unit tests sit next to the code (`*.test.ts`). They cover the money math — tax lots and realized/unrealized gains, loss harvesting and wash-sale warnings, time- and money-weighted returns, net worth with debts (history backfill and the intraday series), auto-invest scheduling, the email digest (due dates, escaping, unsubscribe tokens), SEO head tags, debt payoff, FIRE / Coast FIRE / compound growth, and the retirement simulation with debts. Database and market-data calls are mocked, so tests need no Postgres, Redis or network. `deploy.sh` runs them first and aborts on failure.
+
 ## Deploy
 
 Runs on a single host: docker-compose stack (app on host port **8090**) behind **host nginx** with Let's Encrypt TLS.
 
 ```bash
-./deploy.sh    # commit + push, build images, prisma migrate deploy, restart containers
+./deploy.sh    # run tests, commit + push, build images, prisma migrate deploy, restart containers
 ```
 
 nginx/TLS is configured once via `nginx/getfreefolio.com` + `certbot --nginx`; see that file's header for the commands.

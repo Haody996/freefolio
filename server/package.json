@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "worker:autoinvest": "ts-node src/workers/auto-invest-worker.ts",
-    "worker:digest": "ts-node src/workers/digest-worker.ts"
+    "worker:digest": "ts-node src/workers/digest-worker.ts",
+    "test": "tsc -p tsconfig.test.json && vitest run"
   },
   "license": "ISC",
   "dependencies": {
@@ -44,6 +45,7 @@
     "nodemon": "^3.1.14",
     "prisma": "^7.4.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
   }
 }
