@@ -6,6 +6,7 @@ import Shell from './components/dashboard/Shell'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Spinner from './components/ui/Spinner'
+import ErrorBoundary from './components/ui/ErrorBoundary'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Retirement = lazy(() => import('./pages/Retirement'))
 const Admin = lazy(() => import('./pages/Admin'))
@@ -35,6 +36,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ErrorBoundary where="app">
         {/* Pages load on demand — public calculators don't pull in the whole app. */}
         <Suspense
           fallback={
@@ -75,6 +77,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   )

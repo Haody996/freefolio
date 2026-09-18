@@ -41,6 +41,8 @@ router.post('/chat', async (req: AuthRequest, res: Response): Promise<void> => {
   }
   try {
     const content = await generateTurn(systemInstruction(req.body?.context), contents, TOOLS)
+    const calls = content.parts.filter((p) => p.functionCall).map((p) => p.functionCall!.name)
+    if (calls.length) console.log(`[assistant] model requested: ${calls.join(', ')}`)
     res.json({ content })
   } catch (err) {
     aiError(res, err, 'chat')

@@ -19,6 +19,7 @@ import digestRoutes from './routes/digest'
 import assistantRoutes from './routes/assistant'
 import taxInsightsRoutes from './routes/taxInsights'
 import scenariosRoutes from './routes/scenarios'
+import clientErrorsRoutes from './routes/clientErrors'
 import { initScheduler } from './scheduler'
 import { createIndexRenderer } from './seo'
 
@@ -47,6 +48,7 @@ app.use('/api/digest', digestRoutes)
 app.use('/api/assistant', assistantRoutes)
 app.use('/api/tax-insights', taxInsightsRoutes)
 app.use('/api/scenarios', scenariosRoutes)
+app.use('/api/client-errors', clientErrorsRoutes)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

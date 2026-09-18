@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 import { clearAuth } from '../../lib/auth'
@@ -7,11 +7,13 @@ import { investableTotal, bucketSplit } from '../../lib/portfolio'
 import type { Holding, Liability } from '../../lib/portfolio'
 import { simulateRetirement, retirementInputFromSettings, debtScheduleFromSettings } from '../../lib/retirement'
 import Sidebar from './Sidebar'
+import ErrorBoundary from '../ui/ErrorBoundary'
 
 // App chrome shared by all authenticated pages: sidebar + main content area.
 export default function Shell() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
+  const location = useLocation()
   const qc = useQueryClient()
 
   const holdingsQ = useQuery<{ holdings: Holding[] }>({
@@ -71,7 +73,10 @@ export default function Shell() {
         onLogout={logout}
       />
       <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '16px 14px' : '30px 38px', display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 20 }}>
-        <Outlet />
+        {/* A crash in one page keeps the sidebar usable; navigating clears it. */}
+        <ErrorBoundary where={`page ${location.pathname}`} resetKey={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

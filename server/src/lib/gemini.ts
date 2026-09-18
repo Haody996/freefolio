@@ -32,6 +32,12 @@ export async function generateText(systemInstruction: string, prompt: string): P
   throw new Error(`All Gemini models failed: ${lastError?.message}`)
 }
 
+// Tool results travel as "function" turns from the browser; current Gemini
+// models only accept them inside a "user" turn.
+export function toGeminiContents(contents: Content[]): Content[] {
+  return contents.map((c) => (c.role === 'function' ? { ...c, role: 'user' } : c))
+}
+
 // One conversational turn with tools. Returns the model's content as-is
 // (text and/or function calls, including any thought signatures) so the
 // caller can send it back verbatim on the next turn.
@@ -41,7 +47,7 @@ export async function generateTurn(systemInstruction: string, contents: Content[
   for (const modelName of MODELS) {
     try {
       const model = genAI.getGenerativeModel({ model: modelName, systemInstruction, tools: [{ functionDeclarations }] })
-      const result = await model.generateContent({ contents })
+      const result = await model.generateContent({ contents: toGeminiContents(contents) })
       const content = result.response.candidates?.[0]?.content
       if (content?.parts?.length) return { role: 'model', parts: content.parts }
       throw new Error(`empty response (${result.response.candidates?.[0]?.finishReason ?? 'no candidate'})`)

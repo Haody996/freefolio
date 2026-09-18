@@ -16,6 +16,8 @@ import type { Holding, Liability } from '../lib/portfolio'
 import { fmtUSD } from '../lib/portfolio'
 import type { GainsReport } from '../lib/reports'
 import { panel, pageTitle, secondaryBtn } from '../components/ui/styles'
+import ErrorBoundary from '../components/ui/ErrorBoundary'
+import { reportError } from '../lib/reportError'
 
 // Gemini conversation turns, exactly as the API expects them.
 interface Part {
@@ -57,9 +59,11 @@ const PART_KEYS = ['text', 'thought', 'thoughtSignature', 'functionCall', 'funct
 function load(): { contents: Content[]; msgs: Msg[] } {
   try {
     const raw = sessionStorage.getItem(STORE)
-    if (raw) return JSON.parse(raw)
+    const saved = raw ? JSON.parse(raw) : null
+    // Only restore a well-formed chat; anything else starts fresh.
+    if (saved && Array.isArray(saved.contents) && Array.isArray(saved.msgs) && saved.msgs.every((m: Msg) => m && typeof m.role === 'string')) return saved
   } catch {
-    // storage unavailable — start fresh
+    // storage unavailable or corrupt — start fresh
   }
   return { contents: [], msgs: [] }
 }
@@ -105,9 +109,9 @@ export default function Assistant() {
     const add = (m: Msg) => setChat((c) => ({ ...c, msgs: [...c.msgs, m] }))
     add({ role: 'user', text })
 
-    const gains = new Map((gainsQ.data?.holdings ?? []).map((g) => [g.holdingId, g.unrealized]))
-    const context = buildAssistantContext(data, gains)
     try {
+      const gains = new Map((gainsQ.data?.holdings ?? []).map((g) => [g.holdingId, g.unrealized]))
+      const context = buildAssistantContext(data, gains)
       for (let round = 0; round < 6; round++) {
         setStatus(round === 0 ? 'Thinking…' : 'Explaining the results…')
         const { data: res } = await api.post('/assistant/chat', { context, contents: convo })
@@ -131,7 +135,8 @@ export default function Assistant() {
             const out = await runTool(name, args, data)
             responses.push({ functionResponse: { name, response: out.response } })
             add({ role: 'tool', label, card: out.card })
-          } catch {
+          } catch (toolErr) {
+            reportError(toolErr, `assistant tool ${name}`)
             responses.push({ functionResponse: { name, response: { error: 'The calculation failed.' } } })
             add({ role: 'tool', label, error: 'Calculation failed' })
           }
@@ -141,6 +146,7 @@ export default function Assistant() {
       // A conversation must end on a model turn to accept the next question.
       setChat((c) => ({ ...c, contents: convo[convo.length - 1].role === 'model' ? convo : before }))
     } catch (err: any) {
+      if (!err?.response) reportError(err, 'assistant.ask')
       const msg = err?.response?.data?.error || 'Something went wrong — try again.'
       setChat((c) => ({ contents: before, msgs: [...c.msgs, { role: 'error', text: msg }] }))
     } finally {
@@ -190,7 +196,13 @@ export default function Assistant() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} aria-live="polite">
             {msgs.map((m, i) => (
-              <Message key={i} msg={m} />
+              <ErrorBoundary
+                key={i}
+                where={`assistant message (${m.role === 'tool' ? m.card?.kind ?? 'tool' : m.role})`}
+                fallback={() => <div style={{ fontSize: 13, color: '#FF5470' }}>Couldn’t display this part of the answer — the problem has been reported.</div>}
+              >
+                <Message msg={m} />
+              </ErrorBoundary>
             ))}
             {status && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8A90A2', fontSize: 13 }}>
