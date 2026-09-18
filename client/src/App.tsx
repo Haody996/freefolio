@@ -12,6 +12,8 @@ const Admin = lazy(() => import('./pages/Admin'))
 const Performance = lazy(() => import('./pages/Performance'))
 const Debts = lazy(() => import('./pages/Debts'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Assistant = lazy(() => import('./pages/Assistant'))
+const Taxes = lazy(() => import('./pages/Taxes'))
 const CalculatorsIndex = lazy(() => import('./pages/calculators/CalculatorsIndex'))
 const FireCalculator = lazy(() => import('./pages/calculators/FireCalculator'))
 const CoastFireCalculator = lazy(() => import('./pages/calculators/CoastFireCalculator'))
@@ -65,6 +67,8 @@ export default function App() {
             <Route path="debts" element={<Debts />} />
             <Route path="retirement" element={<Retirement />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="assistant" element={<Assistant />} />
+            <Route path="taxes" element={<Taxes />} />
             <Route path="admin" element={<Admin />} />
           </Route>
 

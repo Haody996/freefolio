@@ -137,6 +137,14 @@ export function computeTaxBreakdown(all: Holding[]): TreatmentSegment[] {
   }).filter((s) => s.value > 0)
 }
 
+// Pre-tax / Roth share of investable assets — the retirement sim's withdrawal
+// buckets. With no holdings yet, assume a typical 50% pre-tax / 20% Roth mix.
+export function bucketSplit(holdings: Holding[]): { preTaxPct: number; rothPct: number } {
+  if (!holdings.length) return { preTaxPct: 0.5, rothPct: 0.2 }
+  const b = computeTaxBreakdown(holdings)
+  return { preTaxPct: b.find((x) => x.treatment === 'PRE_TAX')?.pct ?? 0, rothPct: b.find((x) => x.treatment === 'ROTH')?.pct ?? 0 }
+}
+
 export interface EnrichedHolding extends Holding {
   value: number
   dayChg: number

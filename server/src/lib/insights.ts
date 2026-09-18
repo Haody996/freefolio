@@ -1,10 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from './prisma'
-
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null
-// Newest stable flash first, with fallbacks. gemini-3.6-flash is ~2× faster and
-// higher quality than 2.5-flash on this workload (benchmarked 2026-07-24).
-const MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']
+import { generateText } from './gemini'
 
 // One insight per user per UTC day, cached in-memory.
 const cache = new Map<string, { date: string; text: string }>()
@@ -29,8 +24,6 @@ async function generate(
   dayPct: number,
   movers: Mover[]
 ): Promise<string> {
-  if (!genAI) throw new Error('GEMINI_API_KEY not configured')
-
   const up = [...movers].filter((m) => m.dayChg > 0).sort((a, b) => b.dayChg - a.dayChg).slice(0, 3)
   const down = [...movers].filter((m) => m.dayChg < 0).sort((a, b) => a.dayChg - b.dayChg).slice(0, 3)
   const fmt = (m: Mover) => `${m.symbol} (${m.category.toLowerCase()}) ${m.dayPct >= 0 ? '+' : ''}${(m.dayPct * 100).toFixed(1)}%`
@@ -50,20 +43,7 @@ async function generate(
     .filter(Boolean)
     .join('\n')
 
-  let lastError: Error | undefined
-  for (const modelName of MODELS) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName, systemInstruction })
-      const result = await model.generateContent(prompt)
-      const text = result.response.text().trim()
-      if (text) return text
-      throw new Error('empty response')
-    } catch (err: any) {
-      lastError = err
-      console.warn(`[insights] ${modelName} failed: ${err?.message}`)
-    }
-  }
-  throw new Error(`All Gemini models failed: ${lastError?.message}`)
+  return generateText(systemInstruction, prompt)
 }
 
 export async function getInsight(

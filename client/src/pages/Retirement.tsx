@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import { useIsMobile } from '../lib/useIsMobile'
 import Spinner from '../components/ui/Spinner'
@@ -9,11 +9,14 @@ import YearBars from '../components/dashboard/YearBars'
 import EditableNumber from '../components/dashboard/EditableNumber'
 import NumberInput from '../components/dashboard/NumberInput'
 import { Link } from 'react-router-dom'
-import { investableTotal, computeTaxBreakdown, fmtUSD, fmtCompact, pct, totalDebt } from '../lib/portfolio'
+import { investableTotal, bucketSplit, fmtUSD, fmtCompact, pct, totalDebt } from '../lib/portfolio'
 import type { Holding, Liability } from '../lib/portfolio'
 import { simulateRetirement, backtestRetirement, ssClaimFactor, debtScheduleFromSettings } from '../lib/retirement'
 import { monthsLabel, payoffDate } from '../lib/debts'
 import type { RetirementInput } from '../lib/retirement'
+import type { PlanData } from '../lib/scenarios'
+import LeversPanel from '../components/retirement/LeversPanel'
+import SavedScenarios from '../components/retirement/SavedScenarios'
 
 // Bucket split (preTaxPct/rothPct) is derived from holdings, not persisted.
 type Plan = Omit<RetirementInput, 'preTaxPct' | 'rothPct'>
@@ -173,6 +176,7 @@ type AnalysisTab = 'probability' | 'confidence' | 'cashflow' | 'withdrawals'
 
 export default function Retirement() {
   const isMobile = useIsMobile()
+  const qc = useQueryClient()
   const [plan, setPlan] = useState<Plan | null>(null)
   const [tab, setTab] = useState<AnalysisTab>('probability')
   // Analysis "what-if" override for the starting nest egg (null = use projected).
@@ -213,6 +217,22 @@ export default function Retirement() {
 
   // Persist plan changes (debounced).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Apply a saved scenario: plan fields update like manual edits; debt-plan
+  // fields are saved straight to the settings.
+  function applyPatch(patch: Record<string, unknown>) {
+    const { debtExtraPayment, debtStrategy, ...fields } = patch
+    setPlan((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...fields } as Plan
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => api.put('/projection', next).then(() => qc.invalidateQueries({ queryKey: ['projection'] })), 300)
+      return next
+    })
+    if (debtExtraPayment != null || debtStrategy != null) {
+      api.put('/projection', { debtExtraPayment, debtStrategy }).then(() => qc.invalidateQueries({ queryKey: ['projection'] }))
+    }
+  }
+
   function update<K extends keyof Plan>(field: K, value: Plan[K]) {
     setPlan((prev) => {
       if (!prev) return prev
@@ -233,13 +253,15 @@ export default function Retirement() {
 
   // Withdrawal buckets are derived from the user's holdings (pre-tax / Roth / taxable).
   const holdings = holdingsQ.data?.holdings ?? []
-  const breakdown = computeTaxBreakdown(holdings)
-  const preTaxPct = holdings.length ? breakdown.find((b) => b.treatment === 'PRE_TAX')?.pct ?? 0 : 0.5
-  const rothPct = holdings.length ? breakdown.find((b) => b.treatment === 'ROTH')?.pct ?? 0 : 0.2
+  const { preTaxPct, rothPct } = bucketSplit(holdings)
   const taxablePct = Math.max(0, 1 - preTaxPct - rothPct)
   const liabilities = liabilitiesQ.data?.liabilities ?? []
   const schedule = debtScheduleFromSettings(liabilities, { ...settings, ...(redirectDebt != null ? { redirectDebtPayments: redirectDebt } : {}) })
   const simInput: RetirementInput = { ...plan, preTaxPct, rothPct, ...schedule }
+  // The plan as currently edited, for the levers and saved scenarios.
+  const planSettings = { ...settings, ...plan, redirectDebtPayments: schedule.redirectDebtPayments }
+  const planData: PlanData = { settings: planSettings, holdings, liabilities }
+  const planKey = JSON.stringify([plan, settings?.debtStrategy, settings?.debtExtraPayment, schedule.redirectDebtPayments, investableTotal(holdings), preTaxPct, rothPct, liabilities.map((l) => [l.id, l.balance, l.interestRatePct, l.minPayment])])
 
   const result = simulateRetirement(simInput)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
@@ -580,6 +602,9 @@ export default function Retirement() {
           </div>
         )}
       </section>
+
+      <LeversPanel data={planData} planKey={planKey} />
+      <SavedScenarios data={planData} planKey={planKey} onApply={applyPatch} />
     </>
   )
 }

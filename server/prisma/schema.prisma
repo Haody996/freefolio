@@ -22,6 +22,7 @@ model User {
   projection      ProjectionSettings?
   transactions    Transaction[]
   liabilities     Liability[]
+  scenarios       Scenario[]
 
   // Email digest (net-worth change, top movers, FIRE progress). Opt-in.
   digestFrequency DigestFrequency @default(OFF)
@@ -106,6 +107,11 @@ enum LiabilityType {
 enum DebtStrategy {
   AVALANCHE // highest interest rate first
   SNOWBALL  // smallest balance first
+}
+
+enum FilingStatus {
+  SINGLE
+  MARRIED_JOINT
 }
 
 enum DigestFrequency {
@@ -206,6 +212,21 @@ model Liability {
   @@index([userId])
 }
 
+// ─── Saved what-if scenarios ─────────────────────────────────────────
+// Changes on top of the user's retirement plan (see client lib/scenarios.ts
+// ScenarioOverrides), saved from the AI assistant. Results are recomputed live.
+
+model Scenario {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  overrides Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 // ─── Net-worth history ───────────────────────────────────────────────
 // One row per user per day: assets − liabilities.
 
@@ -270,6 +291,10 @@ model ProjectionSettings {
   debtStrategy         DebtStrategy @default(AVALANCHE)
   debtExtraPayment     Float        @default(0)    // extra $/mo on top of minimums
   redirectDebtPayments Boolean      @default(true) // paid-off payments → savings
+
+  // Tax planning (Roth conversion ladder)
+  filingStatus         FilingStatus @default(SINGLE)
+  rothTargetBracketPct Int          @default(12) // fill conversions up to this federal bracket
 
   updatedAt DateTime @updatedAt
 }

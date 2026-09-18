@@ -135,3 +135,29 @@ describe('settings + backtest', () => {
     a.bands.forEach((band) => expect(band.p5).toBeLessThanOrEqual(band.p95))
   })
 })
+
+describe('what-if inputs', () => {
+  const base: RetirementInput = { ...flat, expectedReturnPct: 7, startingCapital: 400000, endAge: 80 }
+
+  it('applies a one-time shock only in the year ending at that age', () => {
+    const plain = simulateRetirement(base)
+    const shocked = simulateRetirement({ ...base, shock: { age: 32, realReturn: -0.3 } })
+    expect(shocked.series[1].balance).toBeCloseTo(plain.series[1].balance, 6) // age 31 unaffected
+    expect(shocked.series[2].balance).toBeLessThan(plain.series[2].balance)
+  })
+
+  it('lets callers pin the Monte Carlo seed', () => {
+    const a = backtestRetirement(base, 200, 12345)
+    const b = backtestRetirement({ ...base, annualSpending: base.annualSpending + 1 }, 200, 12345)
+    const c = backtestRetirement(base, 200, 54321)
+    expect(a.bands[5].p50).toBeCloseTo(b.bands[5].p50, 0) // same markets
+    expect(a.bands[5].p50).not.toBe(c.bands[5].p50)
+  })
+
+  it('narrows the range of outcomes with lower volatility', () => {
+    const wide = backtestRetirement(base, 300, 7)
+    const calm = backtestRetirement({ ...base, volatilityScale: 0.3 }, 300, 7)
+    const spread = (r: typeof wide) => r.bands[10].p95 - r.bands[10].p5
+    expect(spread(calm)).toBeLessThan(spread(wide) * 0.6)
+  })
+})

@@ -50,6 +50,8 @@ export interface HarvestCandidate {
   shortTermLoss: number
   longTermLoss: number
   washSaleRisk: string | null
+  replacements?: Replacement[] // similar funds to hold during the 30-day window
+  replacementNote?: string
 }
 
 export interface GainsReport {
@@ -80,4 +82,55 @@ export interface PerformanceReport {
   periods: PeriodReturn[]
   included: number
   excluded: string[]
+}
+
+// ─── Tax planner (/api/tax-insights) ─────────────────────────────────
+
+export interface Replacement {
+  symbol: string
+  name: string
+  tracks: string
+}
+
+export type TaxClass = 'BOND' | 'MUNI' | 'REIT' | 'HIGH_YIELD' | 'INTERNATIONAL' | 'BROAD_INDEX' | 'GROWTH' | 'COLLECTIBLE' | 'CASH' | 'OTHER'
+export type TaxBucket = 'TAXABLE' | 'DEFERRED' | 'FREE'
+
+export interface LocationFinding {
+  severity: 'high' | 'medium' | 'low' | 'info' | 'good'
+  title: string
+  detail: string
+  amount: number
+  symbols: string[]
+}
+
+export interface LadderYear {
+  age: number
+  otherIncome: number
+  conversion: number
+  tax: number
+  balance: number
+  balanceNoLadder: number
+}
+
+export interface Ladder {
+  applicable: boolean
+  reason?: string
+  startAge: number
+  endAge: number
+  years: LadderYear[]
+  totalConverted: number
+  totalTax: number
+  avgRate: number
+  balanceAtStart: number
+  rmdAt73: { withLadder: number; withoutLadder: number; bracketWith: number; bracketWithout: number }
+  penaltyFreeFromAge: number | null
+}
+
+export type FilingStatus = 'SINGLE' | 'MARRIED_JOINT'
+
+export interface TaxInsights {
+  assetLocation: { buckets: Record<TaxBucket, Partial<Record<TaxClass, number>>>; findings: LocationFinding[] }
+  rothLadder: Ladder
+  harvest: (HarvestCandidate & { replacements: Replacement[]; replacementNote: string })[]
+  settings: { filingStatus: FilingStatus; rothTargetBracketPct: number; retirementAge: number; currentAge: number }
 }

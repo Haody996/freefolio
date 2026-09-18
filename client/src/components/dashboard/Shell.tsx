@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 import { clearAuth } from '../../lib/auth'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { investableTotal, computeTaxBreakdown } from '../../lib/portfolio'
+import { investableTotal, bucketSplit } from '../../lib/portfolio'
 import type { Holding, Liability } from '../../lib/portfolio'
 import { simulateRetirement, retirementInputFromSettings, debtScheduleFromSettings } from '../../lib/retirement'
 import Sidebar from './Sidebar'
@@ -36,9 +36,7 @@ export default function Shell() {
   // The FIRE goal defaults to the projected nest egg at retirement (from the
   // saved plan), or the user's explicit fireGoal override.
   const s = settingsQ.data?.settings
-  const breakdown = computeTaxBreakdown(holdings)
-  const preTaxPct = holdings.length ? breakdown.find((b) => b.treatment === 'PRE_TAX')?.pct ?? 0 : 0.5
-  const rothPct = holdings.length ? breakdown.find((b) => b.treatment === 'ROTH')?.pct ?? 0 : 0.2
+  const { preTaxPct, rothPct } = bucketSplit(holdings)
   const debts = debtScheduleFromSettings(liabilitiesQ.data?.liabilities ?? [], s)
   const projectedGoal = s ? simulateRetirement(retirementInputFromSettings(s, netWorth, preTaxPct, rothPct, debts)).balanceAtRetirement : 1_500_000
   const fireGoal = s && s.fireGoal != null ? Number(s.fireGoal) : projectedGoal

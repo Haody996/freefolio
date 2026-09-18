@@ -43,6 +43,11 @@ export interface RetirementInput {
   debtAnnualBudget?: number
   redirectDebtPayments?: boolean
   debtYearOffset?: number // plan starts N years after "now" (retirement analysis)
+  // What-if scenarios: a one-time real return in the year ending at `age`
+  // (e.g. a −30% crash), and a multiplier on Monte Carlo volatility (<1 = calmer,
+  // e.g. after moving part of the portfolio into bonds).
+  shock?: { age: number; realReturn: number }
+  volatilityScale?: number
 }
 
 export interface DebtSchedule {
@@ -233,7 +238,7 @@ function runSim(p: RetirementInput, realReturnAt: (i: number) => number) {
 
   for (let i = 1; i <= endAge - p.currentAge; i++) {
     const age = p.currentAge + i
-    const r = realReturnAt(i)
+    const r = p.shock && age === p.shock.age ? p.shock.realReturn : realReturnAt(i)
 
     if (age <= retireAge) {
       const freed = p.redirectDebtPayments ? Math.max(0, debtBudgetAt(i) - debtPaymentAt(i)) : 0
@@ -370,7 +375,13 @@ function percentile(sorted: number[], q: number): number {
   return sorted[i]
 }
 
-export function backtestRetirement(p: RetirementInput, trials = 600): BacktestResult {
+// The Monte Carlo seed used when none is given. Pass one explicitly to compare
+// variants of a plan on the same simulated markets.
+export function defaultSeed(p: RetirementInput, trials = 600): number {
+  return 20260724 ^ Math.round(p.startingCapital + p.annualSpending * 7 + p.retirementAge * 101 + trials)
+}
+
+export function backtestRetirement(p: RetirementInput, trials = 600, seedOverride?: number): BacktestResult {
   const endAge = Math.max(p.retirementAge + 1, p.endAge)
   const nYears = endAge - p.currentAge
 
@@ -379,7 +390,8 @@ export function backtestRetirement(p: RetirementInput, trials = 600): BacktestRe
   const histMean = HISTORICAL_RETURNS.reduce((s, r) => s + r, 0) / HISTORICAL_RETURNS.length
   const shift = userReal - (histMean - histInfl)
 
-  let seed = 20260724 ^ Math.round(p.startingCapital + p.annualSpending * 7 + p.retirementAge * 101 + trials)
+  let seed = seedOverride ?? defaultSeed(p, trials)
+  const scale = p.volatilityScale ?? 1
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0
     return seed / 4294967296
@@ -394,7 +406,7 @@ export function backtestRetirement(p: RetirementInput, trials = 600): BacktestRe
     const returns: number[] = []
     for (let i = 1; i <= nYears; i++) {
       const raw = HISTORICAL_RETURNS[Math.floor(rand() * HISTORICAL_RETURNS.length)]
-      returns.push(raw - histInfl + shift)
+      returns.push(scale === 1 ? raw - histInfl + shift : userReal + (raw - histMean) * scale)
     }
     const sim = runSim(p, (i) => returns[i - 1])
     sim.series.forEach((y, i) => balancesByYear[i].push(y.balance))

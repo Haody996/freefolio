@@ -16,6 +16,9 @@ import liabilitiesRoutes from './routes/liabilities'
 import gainsRoutes from './routes/gains'
 import performanceRoutes from './routes/performance'
 import digestRoutes from './routes/digest'
+import assistantRoutes from './routes/assistant'
+import taxInsightsRoutes from './routes/taxInsights'
+import scenariosRoutes from './routes/scenarios'
 import { initScheduler } from './scheduler'
 import { createIndexRenderer } from './seo'
 
@@ -23,7 +26,8 @@ const app = express()
 const PORT = process.env.PORT || 3001
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }))
-app.use(express.json())
+// Room for AI chat conversations (validated per route; see lib/assistant.ts).
+app.use(express.json({ limit: '300kb' }))
 app.use(express.urlencoded({ extended: true }))
 
 // Routes
@@ -40,6 +44,9 @@ app.use('/api/liabilities', liabilitiesRoutes)
 app.use('/api/gains', gainsRoutes)
 app.use('/api/performance', performanceRoutes)
 app.use('/api/digest', digestRoutes)
+app.use('/api/assistant', assistantRoutes)
+app.use('/api/tax-insights', taxInsightsRoutes)
+app.use('/api/scenarios', scenariosRoutes)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

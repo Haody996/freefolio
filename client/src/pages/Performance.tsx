@@ -8,6 +8,7 @@ import LineChart, { ChartLegend } from '../components/dashboard/LineChart'
 import { fmtUSD, signedUSD, signedPct, pct, accountLabel, accountTreatment } from '../lib/portfolio'
 import type { GainsReport, PerformanceReport, Period, HoldingGains } from '../lib/reports'
 import { panel, panelTitle, pageTitle, statTile, statLabel, statValue, segmented, segmentedWrap } from '../components/ui/styles'
+import Replacements from '../components/dashboard/Replacements'
 
 const PERIOD_LABEL: Record<Period, string> = { '1M': '1 month', '3M': '3 months', YTD: 'Year to date', '1Y': '1 year' }
 
@@ -397,6 +398,7 @@ function GainsSections({ gains, isMobile }: { gains: GainsReport; isMobile: bool
                     {h.shortTermLoss !== 0 && h.longTermLoss === 0 && ' · short-term'}
                     {h.longTermLoss !== 0 && h.shortTermLoss === 0 && ' · long-term'}
                   </div>
+                  {h.replacements && h.replacementNote && <Replacements list={h.replacements} note={h.replacementNote} />}
                   {h.washSaleRisk && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#F2C879', background: 'rgba(255,176,32,0.08)', border: '1px solid rgba(255,176,32,0.25)', borderRadius: 8, padding: '7px 9px', lineHeight: 1.45 }}>
                       ⚠ {h.washSaleRisk}

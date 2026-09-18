@@ -20,6 +20,9 @@ Track total net worth across mixed asset classes and debts, watch holdings reval
 - **Allocation** donut + legend, and a **Snapshot** (today's change, time-weighted 1-yr return vs. S&P 500, crypto exposure, cash buffer, total debt).
 - **Compound-growth projection** — five live sliders (starting capital, monthly contribution, return, horizon, inflation) drive a nominal / inflation-adjusted / contributions chart plus a 4%-rule passive-income (FIRE) readout.
 - **Live prices** — a background worker refreshes market-priced holdings on a schedule. **No API keys required.**
+- **Ask AI** — a chat about your own money ("Can I retire at 50 if I pay off the mortgage first?", "What if the market drops 30% next year?"). Gemini decides which calculation to run; the browser runs it with the app's own tested planning code (retirement simulation, Monte Carlo odds, debt payoff, tax analysis) and Gemini explains the returned numbers. Results show as cards with charts and a **Save as scenario** button; saved scenarios appear on the Retirement page, recomputed live, with **Apply to my plan**.
+- **What matters most** — on the Retirement page, each lever (spend less, retire later, save more, Social Security at 70, guardrails, bonds, fees, faster debt payoff) and each risk (a crash after retiring, lower returns) is re-simulated on the same Monte Carlo markets as the plan and ranked by its effect on the success odds; AI summarizes the top three.
+- **Taxes** — asset location checks (income-producing funds in tax-deferred accounts, growth in Roth, munis and international in taxable, collectibles tax on metals), a **Roth conversion ladder** that fills a chosen 2026 federal bracket each year from retirement until RMDs at 73, and tax-loss harvesting with curated **replacement funds** that track a different index (or a sector fund for single stocks). AI writes a prioritized summary; every number comes from the deterministic analysis.
 - **Email digest** — opt-in weekly (Mondays) or monthly (1st) email: net-worth change, top movers, FIRE progress, with one-click unsubscribe. Preview and send-a-test from Settings. Needs SMTP settings.
 - **Public calculators** (no sign-in) — FIRE, Coast FIRE, compound interest and debt payoff at `/calculators/*`, with server-rendered titles/descriptions/Open Graph tags, `robots.txt` and `sitemap.xml` for search.
 - **Auth** — email/password + Google sign-in (JWT).
@@ -36,7 +39,8 @@ freefolio/
 │       ├── pages/calculators/            public FIRE / Coast FIRE / compound / debt payoff pages
 │       ├── components/dashboard/*        Sidebar, panels, SVG charts, holding/debt modals, payoff planner
 │       └── lib/                          portfolio.ts (formulas, formatters), retirement.ts (sim),
-│                                         debts.ts (payoff), calculators.ts (FIRE math)
+│                                         debts.ts (payoff), calculators.ts (FIRE math),
+│                                         scenarios.ts (what-ifs, levers), assistantTools.ts (AI tools)
 ├── server/     Node + Express 5 + TypeScript, Prisma 7 + Postgres, BullMQ + Redis
 │   └── src/
 │       ├── routes/                       auth, holdings, liabilities, transactions, networth, prices,
@@ -46,6 +50,8 @@ freefolio/
 │       ├── lib/gains.ts                  tax lots, realized/unrealized gains, loss harvesting
 │       ├── lib/performance.ts            time- & money-weighted returns vs. a benchmark
 │       ├── lib/digest.ts, mailer.ts      email digest (nodemailer / SMTP)
+│       ├── lib/gemini.ts, assistant.ts   Gemini access; AI assistant tools, prompts, validation
+│       ├── lib/tax.ts, taxInsights.ts    2026 brackets, asset location, Roth ladder, replacement funds
 │       ├── seo.ts                        head tags for the public calculator pages
 │       ├── workers/                      price-refresh, networth-snapshot, auto-invest, digest
 │       └── scheduler.ts                  repeatable BullMQ jobs
@@ -61,7 +67,8 @@ freefolio/
 - **Transaction** — a BUY/SELL against a holding (`source`: manual, added via "Add holding", or auto-invest). Drives tax lots and returns.
 - **Liability** — a debt: `type`, `balance`, `interestRatePct` (APR), `minPayment` (monthly), optional secured `holdingId`. Net worth = Σ holdings − Σ liability balances.
 - **NetWorthSnapshot** — one row per user per day (assets − liabilities).
-- **ProjectionSettings** — the retirement plan inputs, FIRE goal, and debt plan (`debtStrategy`, `debtExtraPayment`, `redirectDebtPayments`).
+- **ProjectionSettings** — the retirement plan inputs, FIRE goal, debt plan (`debtStrategy`, `debtExtraPayment`, `redirectDebtPayments`) and tax settings (`filingStatus`, `rothTargetBracketPct`).
+- **Scenario** — a saved what-if: a name plus whitelisted changes to the plan (`overrides`), recomputed live against the current plan.
 - **User / Profile** — auth, display name, `digestFrequency` (OFF / WEEKLY / MONTHLY).
 
 ## Local development
@@ -78,7 +85,7 @@ npm run worker:autoinvest                     # (optional) auto-invest (DCA) wor
 npm run worker:digest                         # (optional) email digest worker (needs SMTP_*)
 ```
 
-Market data (quotes + history) needs no API keys. Google sign-in needs `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID`. AI insights need `GEMINI_API_KEY`. The email digest needs `SMTP_HOST` (+ `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`); without it the digest worker skips sending and Settings shows that email isn't switched on.
+Market data (quotes + history) needs no API keys. Google sign-in needs `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID`. AI features (daily insights, Ask AI, lever and tax summaries) need `GEMINI_API_KEY`; without it they return a "not configured" message and everything else works. AI requests are limited to 60 per user per hour. The email digest needs `SMTP_HOST` (+ `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`); without it the digest worker skips sending and Settings shows that email isn't switched on.
 
 ## Tests
 

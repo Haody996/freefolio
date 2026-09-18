@@ -9,6 +9,8 @@ const BASE_NAV: { label: string; to: string }[] = [
   { label: 'Performance', to: '/performance' },
   { label: 'Debts', to: '/debts' },
   { label: 'Retirement', to: '/retirement' },
+  { label: 'Taxes', to: '/taxes' },
+  { label: 'Ask AI', to: '/assistant' },
   { label: 'Settings', to: '/settings' },
 ]
 function navItems() {

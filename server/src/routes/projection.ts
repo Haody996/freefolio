@@ -62,6 +62,12 @@ router.put('/', async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.body.debtStrategy === 'AVALANCHE' || req.body.debtStrategy === 'SNOWBALL') {
     data.debtStrategy = req.body.debtStrategy
   }
+  if (req.body.filingStatus === 'SINGLE' || req.body.filingStatus === 'MARRIED_JOINT') {
+    data.filingStatus = req.body.filingStatus
+  }
+  if ([10, 12, 22, 24, 32].includes(Number(req.body.rothTargetBracketPct))) {
+    data.rothTargetBracketPct = Number(req.body.rothTargetBracketPct)
+  }
 
   const settings = await prisma.projectionSettings.upsert({
     where: { userId: req.userId! },
