@@ -95,7 +95,11 @@ export default function Assistant() {
       // storage full or blocked — the chat still works for this page view
     }
   }, [contents, msgs])
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [msgs, status])
+  // Braces matter: an effect may only return a cleanup function, and newer
+  // browsers make scrollIntoView() return a Promise.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [msgs, status])
 
   const ready = holdingsQ.data && liabilitiesQ.data && settingsQ.data
   const data: PlanData | null = ready ? { holdings: holdingsQ.data!.holdings, liabilities: liabilitiesQ.data!.liabilities, settings: settingsQ.data!.settings } : null
