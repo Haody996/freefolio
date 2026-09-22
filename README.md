@@ -96,6 +96,10 @@ cd server && npx vitest        # watch mode
 
 Unit tests sit next to the code (`*.test.ts`). They cover the money math — tax lots and realized/unrealized gains, loss harvesting and wash-sale warnings, time- and money-weighted returns, net worth with debts (history backfill and the intraday series), auto-invest scheduling, the email digest (due dates, escaping, unsubscribe tokens), SEO head tags, debt payoff, FIRE / Coast FIRE / compound growth, and the retirement simulation with debts. Database and market-data calls are mocked, so tests need no Postgres, Redis or network. `deploy.sh` runs them first and aborts on failure.
 
+## Hardening
+
+The Express app sets security headers on every response (HSTS behind nginx, `nosniff`, `X-Frame-Options`, a referrer and permissions policy, and a CSP that allows Google sign-in, Google Fonts and remote coin logos — see `server/src/lib/security.ts`), gzips responses, and serves the content-hashed build with a one-year immutable cache while `index.html` always revalidates (`server/src/serveClient.ts`). `trust proxy` is on so the real client IP (from nginx) drives rate limits: 30 sign-in attempts per IP per 15 minutes, 8 failed passwords per account, 5 new accounts per IP per hour, and 60 AI requests per user per hour.
+
 ## Deploy
 
 Runs on a single host: docker-compose stack (app on host port **8090**) behind **host nginx** with Let's Encrypt TLS.

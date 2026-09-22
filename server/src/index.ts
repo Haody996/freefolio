@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import path from 'path'
 
 import authRoutes from './routes/auth'
@@ -21,10 +22,16 @@ import taxInsightsRoutes from './routes/taxInsights'
 import scenariosRoutes from './routes/scenarios'
 import clientErrorsRoutes from './routes/clientErrors'
 import { initScheduler } from './scheduler'
-import { createIndexRenderer } from './seo'
+import { serveClient } from './serveClient'
+import { securityHeaders } from './lib/security'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+// Behind nginx: use the real client IP (rate limiting) and scheme (HSTS).
+app.set('trust proxy', 1)
+app.use(securityHeaders)
+app.use(compression())
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }))
 // Room for AI chat conversations (validated per route; see lib/assistant.ts).
@@ -57,10 +64,7 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not foun
 
 // Serve React build in production — client/dist sits two levels above dist/index.js
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.resolve(__dirname, '../../client/dist')
-  const renderIndex = createIndexRenderer(path.join(clientDist, 'index.html'))
-  app.use(express.static(clientDist, { index: false }))
-  app.get('*splat', (req, res) => res.type('html').send(renderIndex(req.path)))
+  serveClient(app, path.resolve(__dirname, '../../client/dist'))
 }
 
 app.listen(PORT, () => {

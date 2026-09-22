@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import type { Transporter } from 'nodemailer'
 
 // SMTP settings come from SMTP_HOST / SMTP_PORT / SMTP_SECURE / SMTP_USER /
 // SMTP_PASS; the sender from EMAIL_FROM (falls back to SMTP_USER). Without a
@@ -7,9 +8,9 @@ export function isEmailConfigured(): boolean {
   return !!process.env.SMTP_HOST
 }
 
-let transporter: nodemailer.Transporter | null = null
+let transporter: Transporter | null = null
 
-function getTransporter(): nodemailer.Transporter {
+function getTransporter(): Transporter {
   if (!transporter) {
     const port = Number(process.env.SMTP_PORT) || 587
     transporter = nodemailer.createTransport({

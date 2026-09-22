@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { validateContents, systemInstruction, TOOLS } from './assistant'
-import { allow } from './rateLimit'
+import { allow, isOver, record, clear } from './rateLimit'
 import { sanitizeOverrides } from '../routes/scenarios'
 
 const user = (text: string) => ({ role: 'user', parts: [{ text }] })
@@ -48,6 +48,17 @@ describe('rate limiting', () => {
     for (let i = 0; i < 3; i++) expect(allow('k', 3, 60_000, t0 + i)).toBe(true)
     expect(allow('k', 3, 60_000, t0 + 10)).toBe(false)
     expect(allow('k', 3, 60_000, t0 + 61_000)).toBe(true)
+  })
+
+  it('counts failures separately from checks, and can be reset', () => {
+    const t0 = 2_000_000
+    expect(isOver('f', 2, 60_000, t0)).toBe(false)
+    record('f', 60_000, t0)
+    record('f', 60_000, t0 + 1)
+    expect(isOver('f', 2, 60_000, t0 + 2)).toBe(true)
+    expect(isOver('f', 2, 60_000, t0 + 61_000)).toBe(false) // window slid
+    clear('f')
+    expect(isOver('f', 1, 60_000, t0 + 3)).toBe(false)
   })
 })
 

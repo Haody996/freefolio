@@ -3,10 +3,31 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { OAuth2Client } from 'google-auth-library'
 import prisma from '../lib/prisma'
+import { allow, isOver, record, clear } from '../lib/rateLimit'
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
 const router = Router()
+
+// Brute-force protection: a cap per IP across all sign-in routes, plus a
+// stricter cap on failed passwords for one account.
+const WINDOW = 15 * 60 * 1000
+const PER_IP = 30
+const FAILURES_PER_ACCOUNT = 8
+
+function tooManyRequests(res: Response): void {
+  res.status(429).json({ error: 'Too many attempts — please wait a few minutes and try again.' })
+}
+
+function ipAllowed(req: Request, res: Response): boolean {
+  if (allow(`auth:${req.ip}`, PER_IP, WINDOW)) return true
+  tooManyRequests(res)
+  return false
+}
+
+function accountKey(email: string): string {
+  return `login:${String(email).trim().toLowerCase()}`
+}
 
 function signToken(userId: string): string {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' })
@@ -39,6 +60,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: 'Password must be at least 8 characters' })
     return
   }
+  if (!ipAllowed(req, res)) return
+  if (!allow(`register:${req.ip}`, 5, 60 * 60 * 1000)) {
+    tooManyRequests(res)
+    return
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
@@ -68,18 +94,26 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: 'Email and password are required' })
     return
   }
+  if (!ipAllowed(req, res)) return
+  if (isOver(accountKey(email), FAILURES_PER_ACCOUNT, WINDOW)) {
+    tooManyRequests(res)
+    return
+  }
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user || !user.password) {
+    record(accountKey(email), WINDOW)
     res.status(401).json({ error: 'Invalid credentials' })
     return
   }
 
   const valid = await bcrypt.compare(password, user.password)
   if (!valid) {
+    record(accountKey(email), WINDOW)
     res.status(401).json({ error: 'Invalid credentials' })
     return
   }
+  clear(accountKey(email)) // successful sign-in resets the count
 
   const isAdmin = await ensureAdmin(user.id, user.email, user.isAdmin)
   res.json({
@@ -121,6 +155,7 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: 'Missing Google credential' })
     return
   }
+  if (!ipAllowed(req, res)) return
 
   try {
     const ticket = await googleClient.verifyIdToken({
