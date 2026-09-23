@@ -23,10 +23,12 @@ import scenariosRoutes from './routes/scenarios'
 import clientErrorsRoutes from './routes/clientErrors'
 import { initScheduler } from './scheduler'
 import { serveClient } from './serveClient'
+import { versionRouter } from './routes/version'
 import { securityHeaders } from './lib/security'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+const CLIENT_DIST = path.resolve(__dirname, '../../client/dist')
 
 // Behind nginx: use the real client IP (rate limiting) and scheme (HSTS).
 app.set('trust proxy', 1)
@@ -58,13 +60,15 @@ app.use('/api/scenarios', scenariosRoutes)
 app.use('/api/client-errors', clientErrorsRoutes)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+// Lets open tabs notice a new deploy (null outside production).
+app.use('/api/version', versionRouter(process.env.NODE_ENV === 'production' ? CLIENT_DIST : null))
 
 // Return JSON 404 for any unmatched /api/* route — prevents index.html being served as JSON
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }))
 
 // Serve React build in production — client/dist sits two levels above dist/index.js
 if (process.env.NODE_ENV === 'production') {
-  serveClient(app, path.resolve(__dirname, '../../client/dist'))
+  serveClient(app, CLIENT_DIST)
 }
 
 app.listen(PORT, () => {

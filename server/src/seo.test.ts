@@ -31,8 +31,13 @@ describe('createIndexRenderer', () => {
     expect(render('/calculators/coast-fire/')).toContain('Coast FIRE Calculator')
   })
 
+  it('injects head tags for the landing page', () => {
+    const html = render('/')
+    expect(html).toContain('<title>getfreefolio — Track your net worth and plan your early retirement</title>')
+    expect(html).toContain('<link rel="canonical" href="https://getfreefolio.com/" />')
+  })
+
   it('serves the plain template for other routes', () => {
-    expect(render('/')).toBe(TEMPLATE)
     expect(render('/debts')).toBe(TEMPLATE)
     expect(render('/calculators/unknown')).toBe(TEMPLATE)
   })

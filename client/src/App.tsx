@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { isAuthenticated } from './lib/auth'
 import Shell from './components/dashboard/Shell'
@@ -7,6 +7,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Spinner from './components/ui/Spinner'
 import ErrorBoundary from './components/ui/ErrorBoundary'
+import UpdatePrompt from './components/ui/UpdatePrompt'
+const Landing = lazy(() => import('./pages/Landing'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Retirement = lazy(() => import('./pages/Retirement'))
 const Admin = lazy(() => import('./pages/Admin'))
@@ -27,9 +29,43 @@ const queryClient = new QueryClient({
   },
 })
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  if (!isAuthenticated()) return <Navigate to="/login" replace />
-  return <>{children}</>
+function AppRoutes() {
+  // Reading the location re-evaluates the token on every navigation, so logging
+  // in or out swaps between the landing page and the dashboard.
+  useLocation()
+  const authed = isAuthenticated()
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+
+      {/* Public calculators — no sign-in */}
+      <Route path="/calculators" element={<CalculatorsIndex />} />
+      <Route path="/calculators/fire" element={<FireCalculator />} />
+      <Route path="/calculators/coast-fire" element={<CoastFireCalculator />} />
+      <Route path="/calculators/compound-interest" element={<CompoundInterestCalculator />} />
+      <Route path="/calculators/debt-payoff" element={<DebtPayoffCalculator />} />
+
+      {authed ? (
+        <Route path="/" element={<Shell />}>
+          <Route index element={<Dashboard />} />
+          <Route path="performance" element={<Performance />} />
+          <Route path="debts" element={<Debts />} />
+          <Route path="retirement" element={<Retirement />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="assistant" element={<Assistant />} />
+          <Route path="taxes" element={<Taxes />} />
+          <Route path="admin" element={<Admin />} />
+        </Route>
+      ) : (
+        /* Logged out, "/" is the marketing page; app URLs ask for a sign-in. */
+        <Route path="/" element={<Landing />} />
+      )}
+
+      <Route path="*" element={<Navigate to={authed ? '/' : '/login'} replace />} />
+    </Routes>
+  )
 }
 
 export default function App() {
@@ -45,40 +81,11 @@ export default function App() {
             </div>
           }
         >
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-
-          {/* Public calculators — no sign-in */}
-          <Route path="/calculators" element={<CalculatorsIndex />} />
-          <Route path="/calculators/fire" element={<FireCalculator />} />
-          <Route path="/calculators/coast-fire" element={<CoastFireCalculator />} />
-          <Route path="/calculators/compound-interest" element={<CompoundInterestCalculator />} />
-          <Route path="/calculators/debt-payoff" element={<DebtPayoffCalculator />} />
-
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <Shell />
-              </PrivateRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="performance" element={<Performance />} />
-            <Route path="debts" element={<Debts />} />
-            <Route path="retirement" element={<Retirement />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="assistant" element={<Assistant />} />
-            <Route path="taxes" element={<Taxes />} />
-            <Route path="admin" element={<Admin />} />
-          </Route>
-
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          <AppRoutes />
         </Suspense>
         </ErrorBoundary>
       </BrowserRouter>
+      <UpdatePrompt />
     </QueryClientProvider>
   )
 }

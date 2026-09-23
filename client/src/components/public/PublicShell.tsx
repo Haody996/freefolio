@@ -12,7 +12,7 @@ export default function PublicShell({ children }: { children: React.ReactNode })
     <div style={{ minHeight: '100vh', background: '#0E0F13', color: '#F2F4F8', display: 'flex', flexDirection: 'column' }}>
       <header style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 28px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link to={authed ? '/' : '/calculators'} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'inherit' }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'inherit' }}>
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
               <rect x="9" y="0" width="12.7" height="12.7" transform="rotate(45 9 9)" fill="#22E38A" />
             </svg>

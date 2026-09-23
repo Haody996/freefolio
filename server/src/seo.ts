@@ -1,12 +1,17 @@
 import fs from 'fs'
 
 // Per-route <title> / meta description / canonical + Open Graph tags for the
-// public calculator pages, injected into the SPA's index.html so crawlers and
-// link previews see them without running JS. Keep in sync with
+// public pages (landing + calculators), injected into the SPA's index.html so
+// crawlers and link previews see them without running JS. Keep in sync with
 // client/src/lib/calculatorPages.ts.
 const SITE = 'https://getfreefolio.com'
 
 const PAGES: Record<string, { title: string; description: string }> = {
+  '/': {
+    title: 'getfreefolio — Track your net worth and plan your early retirement',
+    description:
+      'Free net-worth tracker and FIRE planner: stocks, crypto, metals, property and debts in one number, with live prices, real returns, tax-loss harvesting and a retirement simulation.',
+  },
   '/calculators': {
     title: 'Free Financial Calculators — FIRE, Coast FIRE, Compound Interest, Debt Payoff | getfreefolio',
     description: 'Free calculators for financial independence: FIRE number, Coast FIRE, compound interest with monthly contributions, and avalanche vs. snowball debt payoff.',
