@@ -14,6 +14,7 @@ Rules:
 - Be concise: 2–5 sentences or a short bulleted list. Plain language; explain any jargon. Use **bold** for key numbers. No tables or headings.
 - Educational only: explain trade-offs, never tell the user to buy or sell specific securities, and suggest a tax professional for tax decisions.
 - If a question needs data the user hasn't entered (for example no debts), say what to add.
+- The conversation includes the user's last few questions in this chat, with your answers and tool results. Treat a new question as a possible follow-up: "what about 52 instead?" or "and if I also save $500 more?" changes the earlier what-if, so call the tool again with the earlier changes plus the new one, and say which earlier assumptions you kept. Numbers from earlier answers may be quoted, but always run a tool for a new calculation. If the question starts a new topic, ignore the earlier what-ifs.
 - Stay on personal finance and this user's data.`
 
 const num = (description: string) => ({ type: SchemaType.NUMBER as const, description })

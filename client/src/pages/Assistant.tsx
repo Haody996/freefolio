@@ -10,6 +10,7 @@ import ScenarioCard from '../components/assistant/ScenarioCard'
 import DebtScenarioCard from '../components/assistant/DebtScenarioCard'
 import LeversTable from '../components/assistant/LeversTable'
 import { runTool, buildAssistantContext } from '../lib/assistantTools'
+import { recentExchanges, MEMORY_QUESTIONS } from '../lib/assistantMemory'
 import type { ToolCard } from '../lib/assistantTools'
 import type { PlanData } from '../lib/scenarios'
 import type { Holding, Liability } from '../lib/portfolio'
@@ -108,8 +109,10 @@ export default function Assistant() {
     const text = question.trim()
     if (!text || status || !data) return
     setInput('')
-    const before = contents
-    let convo: Content[] = [...contents, { role: 'user', parts: [{ text }] }]
+    // The model sees the last few questions (with their answers and tool
+    // results) so follow-ups work; older ones drop out of its memory.
+    const before = recentExchanges(contents)
+    let convo: Content[] = [...before, { role: 'user', parts: [{ text }] }]
     const add = (m: Msg) => setChat((c) => ({ ...c, msgs: [...c.msgs, m] }))
     add({ role: 'user', text })
 
@@ -148,7 +151,7 @@ export default function Assistant() {
         convo = [...convo, { role: 'function', parts: responses }]
       }
       // A conversation must end on a model turn to accept the next question.
-      setChat((c) => ({ ...c, contents: convo[convo.length - 1].role === 'model' ? convo : before }))
+      setChat((c) => ({ ...c, contents: convo[convo.length - 1].role === 'model' ? recentExchanges(convo) : before }))
     } catch (err: any) {
       if (!err?.response) reportError(err, 'assistant.ask')
       const msg = err?.response?.data?.error || 'Something went wrong — try again.'
@@ -250,7 +253,7 @@ export default function Assistant() {
           </button>
         </form>
         <div style={{ fontSize: 11.5, color: '#5B6172', lineHeight: 1.5 }}>
-          Your numbers are sent to Google Gemini to write the answers. Educational only — not financial or tax advice.
+          Remembers your last {MEMORY_QUESTIONS} questions in this chat for follow-ups. Your numbers are sent to Google Gemini to write the answers. Educational only — not financial or tax advice.
         </div>
       </section>
     </>
