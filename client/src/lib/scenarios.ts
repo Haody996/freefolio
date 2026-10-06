@@ -6,7 +6,7 @@ import { simulateRetirement, backtestRetirement, defaultSeed, retirementInputFro
 import type { RetirementInput } from './retirement'
 import { simulatePayoff } from './debts'
 import type { DebtStrategy } from './debts'
-import { investableTotal, bucketSplit, fmtUSD } from './portfolio'
+import { planStart, payoffDebts, isMargin, fmtUSD } from './portfolio'
 import type { Holding, Liability } from './portfolio'
 
 export interface PlanData {
@@ -62,8 +62,8 @@ export const BOND_RETURN_PCT = 4.5
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 
 export function basePlanInput(data: PlanData, settings: Record<string, unknown> = data.settings, liabilities: Liability[] = data.liabilities): RetirementInput {
-  const { preTaxPct, rothPct } = bucketSplit(data.holdings)
-  return retirementInputFromSettings(settings, investableTotal(data.holdings), preTaxPct, rothPct, debtScheduleFromSettings(liabilities, settings))
+  const { capital, preTaxPct, rothPct } = planStart(data.holdings, data.liabilities)
+  return retirementInputFromSettings(settings, capital, preTaxPct, rothPct, debtScheduleFromSettings(liabilities, settings))
 }
 
 // Deterministic path + Monte Carlo odds, computed exactly like the Retirement
@@ -188,8 +188,14 @@ export function applyOverrides(data: PlanData, o: ScenarioOverrides): AppliedSce
   }
   let freed = 0
   if (o.payOffDebts?.length) {
-    const { matched, missing } = findDebts(data.liabilities, o.payOffDebts)
+    const found = findDebts(data.liabilities, o.payOffDebts)
+    const { missing } = found
     for (const m of missing) warnings.push(`No debt named “${m}” — add it on the Debts page to include it.`)
+    // Margin already comes off investments in every plan, so repaying it from
+    // the account changes nothing.
+    const margin = found.matched.filter(isMargin)
+    if (margin.length) changes.push(`${margin.map((l) => l.name).join(', ')}: margin is already subtracted from your investments in the plan, so paying it off from the account doesn't change the projection`)
+    const matched = found.matched.filter((l) => !isMargin(l))
     const cost = matched.reduce((s, l) => s + l.balance, 0)
     const names = matched.map((l) => l.name).join(', ')
     if (matched.length && cost > input.startingCapital) {
@@ -211,7 +217,7 @@ export function applyOverrides(data: PlanData, o: ScenarioOverrides): AppliedSce
   if (freed > 0) {
     // Keep the monthly debt budget you had: whatever isn't needed for the
     // remaining debts is "freed" (and saved when redirect is on).
-    const budget = data.liabilities.reduce((s, l) => s + (l.balance > 0 ? l.minPayment : 0), 0) + extra
+    const budget = payoffDebts(data.liabilities).reduce((s, l) => s + (l.balance > 0 ? l.minPayment : 0), 0) + extra
     schedule.debtAnnualBudget = budget * 12
     const target = liabilities.length ? `your other debts${schedule.redirectDebtPayments ? ', then savings' : ''}` : schedule.redirectDebtPayments ? 'savings' : null
     changes.push(target ? `The ${fmtUSD(liabilities.length ? freed : budget)}/mo you paid goes to ${target}` : `The ${fmtUSD(budget)}/mo you paid isn't saved (redirect to savings is off)`)
@@ -307,7 +313,7 @@ export function computeLevers(data: PlanData): LeversResult {
   if (baseInput.aumFeePct > 0) {
     candidates.push({ key: 'fees', label: `Cut fees from ${baseInput.aumFeePct}% to 0.1%`, kind: 'improve', overrides: { aumFeePct: Math.min(0.1, baseInput.aumFeePct) } })
   }
-  if (data.liabilities.some((l) => l.balance > 0)) {
+  if (payoffDebts(data.liabilities).some((l) => l.balance > 0)) {
     const extra = Number(data.settings.debtExtraPayment) || 0
     candidates.push({ key: 'debt_faster', label: 'Pay $500/mo extra toward debts', kind: 'improve', overrides: { debtExtraPayment: extra + 500 } })
   }
@@ -344,17 +350,21 @@ export function runDebtScenario(
   const toInput = (ls: Liability[]) => ls.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))
   const curStrategy: DebtStrategy = data.settings.debtStrategy === 'SNOWBALL' ? 'SNOWBALL' : 'AVALANCHE'
   const curExtra = Number(data.settings.debtExtraPayment) || 0
-  const cur = simulatePayoff(toInput(data.liabilities), curStrategy, curExtra)
+  // Margin loans have no required payment, so they sit outside payoff plans.
+  const debts = payoffDebts(data.liabilities)
+  const cur = simulatePayoff(toInput(debts), curStrategy, curExtra)
 
   const changes: string[] = []
   const warnings: string[] = []
-  let remaining = data.liabilities
+  let remaining = debts
   let lumpSum = 0
   let freed = 0
   if (args.payOffDebts?.length) {
-    const { matched, missing } = findDebts(data.liabilities, args.payOffDebts)
-    for (const m of missing) warnings.push(`No debt named “${m}”.`)
-    remaining = data.liabilities.filter((l) => !matched.includes(l))
+    const { matched, missing } = findDebts(debts, args.payOffDebts)
+    for (const m of missing) {
+      warnings.push(findDebts(data.liabilities, [m]).matched.some(isMargin) ? `“${m}” is a margin loan — it has no required payment, so it isn't part of payoff plans.` : `No debt named “${m}”.`)
+    }
+    remaining = debts.filter((l) => !matched.includes(l))
     lumpSum = matched.reduce((s, l) => s + l.balance, 0)
     freed = matched.reduce((s, l) => s + l.minPayment, 0)
     if (matched.length) changes.push(`Pay off ${matched.map((l) => l.name).join(', ')} now (${fmtUSD(lumpSum)}); its ${fmtUSD(freed)}/mo goes to the rest`)

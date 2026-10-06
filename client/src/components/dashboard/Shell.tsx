@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../lib/api'
 import { clearAuth } from '../../lib/auth'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { investableTotal, bucketSplit } from '../../lib/portfolio'
+import { planStart } from '../../lib/portfolio'
 import type { Holding, Liability } from '../../lib/portfolio'
 import { simulateRetirement, retirementInputFromSettings, debtScheduleFromSettings } from '../../lib/retirement'
 import Sidebar from './Sidebar'
@@ -30,15 +30,14 @@ export default function Shell() {
     queryFn: async () => (await api.get('/liabilities')).data,
   })
 
-  // FIRE progress tracks investable assets (real estate & vehicles excluded);
-  // debts enter the projection through their payments.
+  // FIRE progress tracks investable assets (real estate & vehicles excluded)
+  // net of margin loans; other debts enter the projection through payments.
   const holdings = holdingsQ.data?.holdings ?? []
-  const netWorth = investableTotal(holdings)
+  const { capital: netWorth, preTaxPct, rothPct } = planStart(holdings, liabilitiesQ.data?.liabilities ?? [])
 
   // The FIRE goal defaults to the projected nest egg at retirement (from the
   // saved plan), or the user's explicit fireGoal override.
   const s = settingsQ.data?.settings
-  const { preTaxPct, rothPct } = bucketSplit(holdings)
   const debts = debtScheduleFromSettings(liabilitiesQ.data?.liabilities ?? [], s)
   const projectedGoal = s ? simulateRetirement(retirementInputFromSettings(s, netWorth, preTaxPct, rothPct, debts)).balanceAtRetirement : 1_500_000
   const fireGoal = s && s.fireGoal != null ? Number(s.fireGoal) : projectedGoal

@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import PublicShell, { SignupCta, Explainer } from '../../components/public/PublicShell'
 import CalcField from '../../components/public/CalcField'
+import NumberInput from '../../components/dashboard/NumberInput'
 import GrowthChart, { Row, REAL } from '../../components/dashboard/GrowthChart'
 import { ChartLegend } from '../../components/dashboard/LineChart'
 import { computeProjection, fmtUSD, fmtCompact } from '../../lib/portfolio'
@@ -14,9 +16,20 @@ const PAGE = CALCULATOR_PAGES.find((p) => p.path === '/calculators/compound-inte
 export default function CompoundInterestCalculator() {
   useSeo(PAGE.title, PAGE.description)
   const isMobile = useIsMobile()
-  const [inp, setInp] = useState({ start: 10000, monthly: 500, ret: 7, years: 30, infl: 3 })
+  const [inp, setInp] = useState({ start: 10000, monthly: 500, ret: 7, years: 30, infl: 3, age: 30 })
   const set = (k: keyof typeof inp) => (n: number) => setInp((p) => ({ ...p, [k]: n }))
-  const p = computeProjection(inp)
+  // Contribution changes by age, e.g. "from 50, contribute $0".
+  const [changes, setChanges] = useState<{ id: number; age: number; monthly: number }[]>([])
+  const lastAge = inp.age + inp.years
+  const inRange = (age: number) => age > inp.age && age < lastAge
+  const active = changes.filter((c) => inRange(c.age)).sort((a, b) => a.age - b.age)
+  function addChange() {
+    const prev = changes.length ? Math.max(...changes.map((c) => c.age)) : null
+    const age = Math.min(lastAge - 1, prev != null ? prev + 5 : inp.age < 50 && lastAge > 50 ? 50 : inp.age + Math.ceil(inp.years / 2))
+    setChanges((cs) => [...cs, { id: Date.now(), age, monthly: 0 }])
+  }
+  const editChange = (id: number, patch: Partial<{ age: number; monthly: number }>) => setChanges((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+  const p = computeProjection({ ...inp, changes: active.map((c) => ({ year: c.age - inp.age, monthly: c.monthly })) })
   const multiple = p.totalContrib ? p.finalNom / p.totalContrib : 0
 
   const th: React.CSSProperties = { padding: '6px 10px', textAlign: 'right', fontWeight: 700, position: 'sticky', top: 0, background: '#16181F' }
@@ -38,7 +51,52 @@ export default function CompoundInterestCalculator() {
             <CalcField label="Monthly contribution" value={inp.monthly} onChange={set('monthly')} prefix="$" step={50} span />
             <CalcField label="Annual return" value={inp.ret} onChange={set('ret')} suffix="%" step={0.1} max={50} />
             <CalcField label="Years" value={inp.years} onChange={set('years')} integer min={1} max={70} />
-            <CalcField label="Inflation" value={inp.infl} onChange={set('infl')} suffix="%" step={0.1} span />
+            <CalcField label="Your age" value={inp.age} onChange={set('age')} integer min={0} max={100} />
+            <CalcField label="Inflation" value={inp.infl} onChange={set('infl')} suffix="%" step={0.1} />
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', marginTop: 16, paddingTop: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Change contributions later</div>
+            <div style={{ fontSize: 12, color: '#8A90A2', margin: '3px 0 10px', lineHeight: 1.5 }}>
+              Save {fmtUSD(inp.monthly)}/mo until a certain age, then switch — e.g. stop at 50, or save more once the mortgage is paid.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {changes.map((c) => (
+                <div key={c.id}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr auto', gap: 8, alignItems: 'end' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, color: '#8A90A2', fontWeight: 600 }}>From age</span>
+                      <NumberInput value={c.age} onChange={(n) => editChange(c.id, { age: n })} integer min={0} max={120} />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, color: '#8A90A2', fontWeight: 600 }}>Contribute</span>
+                      <NumberInput value={c.monthly} onChange={(n) => editChange(c.id, { monthly: n })} prefix="$" suffix="/mo" step={50} min={0} />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setChanges((cs) => cs.filter((x) => x.id !== c.id))}
+                      aria-label={`Remove the change at age ${c.age}`}
+                      style={{ height: 40, width: 32, border: 'none', background: 'transparent', color: '#8A90A2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  {!inRange(c.age) && (
+                    <div style={{ fontSize: 11.5, color: '#F5A524', marginTop: 4 }}>
+                      Outside this projection — use an age from {inp.age + 1} to {lastAge - 1}.
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addChange}
+                disabled={inp.years < 2}
+                style={{ alignSelf: 'flex-start', border: '1px dashed rgba(155,124,255,0.45)', background: 'rgba(155,124,255,0.06)', color: '#C9CDD8', borderRadius: 10, padding: '8px 12px', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                + Add a change
+              </button>
+            </div>
           </div>
         </section>
 
@@ -60,9 +118,15 @@ export default function CompoundInterestCalculator() {
               contributions={p.contributed}
               startAmount={p.start}
               lines={[{ label: "In today's dollars", color: REAL, values: p.real, dashed: true }]}
-              tickLabel={(i) => `${i}y`}
-              pointLabel={(i) => `${i === 0 ? 'Today' : `Year ${i}`} · ${new Date().getFullYear() + i}`}
-              extraRows={(i) => <Row label="In today's dollars" value={fmtUSD(p.real[i])} color={REAL} dot={REAL} />}
+              tickLabel={(i) => (i === 0 ? `Age ${inp.age}` : String(inp.age + i))}
+              pointLabel={(i) => `${i === 0 ? 'Today' : `Year ${i}`} · age ${inp.age + i} · ${new Date().getFullYear() + i}`}
+              markers={active.map((c) => ({ index: c.age - inp.age, label: `${fmtUSD(c.monthly)}/mo from ${c.age}` }))}
+              extraRows={(i) => (
+                <>
+                  <Row label="In today's dollars" value={fmtUSD(p.real[i])} color={REAL} dot={REAL} />
+                  {i > 0 && <Row label="Contributing" value={`${fmtUSD(p.monthlyByYear[i - 1])}/mo`} color="#C9CDD8" dot="transparent" />}
+                </>
+              )}
               ariaLabel={`Growth over ${p.years} years to ${fmtUSD(p.finalNom)}.`}
             />
             <ChartLegend items={[{ color: '#22E38A', label: 'Balance (green band = interest earned)' }, { color: '#35A0FF', label: 'Contributions' }, { color: '#9B7CFF', label: "In today's dollars", dashed: true }]} />
@@ -70,12 +134,15 @@ export default function CompoundInterestCalculator() {
           </section>
 
           <section style={panel}>
-            <div style={{ fontFamily: "'Space Grotesk'", fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Year by year</div>
+            <div style={{ fontFamily: "'Space Grotesk'", fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Year by year</div>
+            <div style={{ fontSize: 12, color: '#8A90A2', marginBottom: 10 }}>Balance when you reach each age; “Monthly” is what you contributed in the year leading up to it.</div>
             <div style={{ maxHeight: 320, overflow: 'auto', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ color: '#8A90A2', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     <th style={{ ...th, textAlign: 'left' }}>Year</th>
+                    <th style={th}>Age</th>
+                    <th style={th}>Monthly</th>
                     <th style={th}>Contributed</th>
                     <th style={th}>Growth</th>
                     <th style={th}>Balance</th>
@@ -86,6 +153,8 @@ export default function CompoundInterestCalculator() {
                   {p.nominal.slice(1).map((v, i) => (
                     <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ ...td, textAlign: 'left' }}>{i + 1}</td>
+                      <td style={td}>{inp.age + i + 1}</td>
+                      <td style={{ ...td, color: i > 0 && p.monthlyByYear[i] !== p.monthlyByYear[i - 1] ? '#F5A524' : '#C9CDD8', fontWeight: i > 0 && p.monthlyByYear[i] !== p.monthlyByYear[i - 1] ? 700 : 400 }}>{fmtUSD(p.monthlyByYear[i])}</td>
                       <td style={{ ...td, color: '#35A0FF' }}>{fmtUSD(p.contributed[i + 1])}</td>
                       <td style={{ ...td, color: '#22E38A' }}>{fmtUSD(v - p.contributed[i + 1])}</td>
                       <td style={{ ...td, fontWeight: 700 }}>{fmtUSD(v)}</td>
@@ -104,6 +173,7 @@ export default function CompoundInterestCalculator() {
       <Explainer
         items={[
           { q: 'How does compounding work here?', a: <>Contributions are added monthly and growth compounds monthly at your annual return ÷ 12. Over long periods, growth on past growth ends up bigger than what you contribute.</> },
+          { q: 'Can my contributions change over time?', a: <>Yes — add a change to switch your monthly contribution from a given age, for example saving until 50 and then stopping, or saving more once a loan is paid off. Changes take effect at the start of that year of age, and the chart marks each one.</> },
           { q: "What are today's dollars?", a: <>Future balances are divided by cumulative inflation, so you can judge what they'd actually buy. At 3% inflation, prices roughly double every 24 years.</> },
           { q: 'What return should I use?', a: <>US stocks have returned about 10% a year historically (roughly 7% after inflation). A mixed stock/bond portfolio is often modeled at 5–7%.</> },
         ]}

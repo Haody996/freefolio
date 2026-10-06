@@ -34,6 +34,7 @@ export default function GrowthChart({
   pointLabel,
   lines = [],
   refLine,
+  markers = [],
   extraRows,
   ariaLabel,
 }: {
@@ -44,6 +45,7 @@ export default function GrowthChart({
   pointLabel: (i: number) => string
   lines?: GrowthLine[]
   refLine?: { label: string; value: number; color: string }
+  markers?: { index: number; label: string }[] // vertical lines, e.g. where contributions change
   extraRows?: (i: number) => React.ReactNode
   ariaLabel: string
 }) {
@@ -156,6 +158,16 @@ export default function GrowthChart({
               </text>
             </g>
           )}
+          {markers
+            .filter((m) => m.index > 0 && m.index < n)
+            .map((m) => (
+              <g key={`m${m.index}`}>
+                <line x1={x(m.index)} x2={x(m.index)} y1={padT} y2={base} stroke="rgba(255,255,255,0.28)" strokeWidth={1} strokeDasharray="3 4" />
+                <text x={x(m.index) + (x(m.index) / W > 0.8 ? -4 : 4)} y={padT + 10} textAnchor={x(m.index) / W > 0.8 ? 'end' : 'start'} fill="#C9CDD8" fontSize={10} fontWeight={600}>
+                  {m.label}
+                </text>
+              </g>
+            ))}
           <path d={path(contributions)} fill="none" stroke={CONTRIB} strokeWidth={1.8} />
           {lines.map((l) => (
             <path key={l.label} d={path(l.values)} fill="none" stroke={l.color} strokeWidth={2} strokeDasharray={l.dashed ? '3 4' : undefined} />

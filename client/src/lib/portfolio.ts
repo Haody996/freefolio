@@ -233,7 +233,7 @@ export function quantityUnit(c: Category): string {
 
 // ─── Liabilities ─────────────────────────────────────────────────────
 
-export type LiabilityType = 'MORTGAGE' | 'HELOC' | 'AUTO_LOAN' | 'STUDENT_LOAN' | 'CREDIT_CARD' | 'PERSONAL_LOAN' | 'MEDICAL' | 'OTHER'
+export type LiabilityType = 'MORTGAGE' | 'HELOC' | 'AUTO_LOAN' | 'STUDENT_LOAN' | 'CREDIT_CARD' | 'PERSONAL_LOAN' | 'MEDICAL' | 'MARGIN' | 'OTHER'
 
 export interface Liability {
   id: string
@@ -254,6 +254,7 @@ export const LIABILITY_TYPES: { value: LiabilityType; label: string; color: stri
   { value: 'CREDIT_CARD', label: 'Credit card', color: '#FF5470' },
   { value: 'PERSONAL_LOAN', label: 'Personal loan', color: '#FFB020' },
   { value: 'MEDICAL', label: 'Medical', color: '#FF6FB5' },
+  { value: 'MARGIN', label: 'Margin loan', color: '#F5A524' },
   { value: 'OTHER', label: 'Other', color: '#8A90A2' },
 ]
 const LIABILITY_BY_VALUE = new Map(LIABILITY_TYPES.map((t) => [t.value, t]))
@@ -265,6 +266,60 @@ export function liabilityColor(t: LiabilityType): string {
 }
 export function totalDebt(liabilities: Liability[]): number {
   return liabilities.reduce((s, l) => s + l.balance, 0)
+}
+
+// ─── Margin loans ────────────────────────────────────────────────────
+// A margin loan borrows against a taxable brokerage account and has no required
+// payment, so it isn't part of the avalanche/snowball payoff plan. Plans start
+// from the account's equity instead: the loan comes off investable assets.
+
+export const isMargin = (l: Pick<Liability, 'type'>) => l.type === 'MARGIN'
+
+// Debts paid down from monthly cash flow (everything except margin).
+export function payoffDebts<T extends Pick<Liability, 'type'>>(liabilities: T[]): T[] {
+  return liabilities.filter((l) => !isMargin(l))
+}
+
+export function marginDebt(liabilities: Liability[]): number {
+  return liabilities.filter(isMargin).reduce((s, l) => s + l.balance, 0)
+}
+
+// Starting point for retirement plans: investable assets net of margin loans,
+// with the loan taken out of the taxable bucket (where margin accounts live).
+export function planStart(holdings: Holding[], liabilities: Liability[] = []): { capital: number; preTaxPct: number; rothPct: number; margin: number } {
+  const gross = investableTotal(holdings)
+  const split = bucketSplit(holdings)
+  const margin = Math.min(marginDebt(liabilities), gross)
+  const capital = gross - margin
+  if (margin <= 0 || capital <= 0) return { capital, ...split, margin }
+  const preTax = split.preTaxPct * gross
+  const roth = split.rothPct * gross
+  return { capital, preTaxPct: Math.min(preTax, capital) / capital, rothPct: Math.min(roth, Math.max(0, capital - preTax)) / capital, margin }
+}
+
+// Brokers typically require 25–40% equity; 30% is a common house minimum.
+export const MARGIN_MAINTENANCE = 0.3
+
+// The securities a margin loan borrows against: stocks, ETFs and bonds in
+// taxable accounts — at the loan's brokerage when any holding names it.
+export function marginCollateral(holdings: Holding[], institution: string): { value: number; atInstitution: boolean } {
+  const eligible = holdings.filter((h) => accountTreatment(h.accountType) === 'TAXABLE' && (h.category === 'STOCKS' || h.category === 'BONDS'))
+  const inst = institution.trim().toLowerCase()
+  const atBroker = inst ? eligible.filter((h) => h.institution.trim().toLowerCase() === inst) : []
+  const used = atBroker.length ? atBroker : eligible
+  return { value: used.reduce((s, h) => s + h.quantity * h.price, 0), atInstitution: atBroker.length > 0 }
+}
+
+// Loan-to-value, account equity and how far the account can fall before a
+// margin call: the call comes when equity / value < maintenance, i.e. when the
+// value drops below loan / (1 − maintenance).
+export function marginStatus(loan: number, collateral: number, maintenance = MARGIN_MAINTENANCE): { ltv: number; equityPct: number; callDropPct: number } | null {
+  if (collateral <= 0 || loan <= 0) return null
+  return {
+    ltv: loan / collateral,
+    equityPct: (collateral - loan) / collateral,
+    callDropPct: Math.max(0, 1 - loan / ((1 - maintenance) * collateral)),
+  }
 }
 
 export function catColor(c: Category): string {
@@ -312,9 +367,16 @@ export interface AllocSlice {
   color: string
 }
 
-// Index-fund families that can optionally be grouped into a single slice.
+// Funds that track the same thing and can optionally be grouped into one slice.
 const SP500_FUNDS = new Set(['VOO', 'VFIAX', 'VLISX', 'SPY', 'IVV', 'FXAIX', 'SWPPX', 'SPLG', 'VFINX', 'SPXL', 'UPRO'])
 const NASDAQ100_FUNDS = new Set(['QQQ', 'QQQM', 'QQEW', 'ONEQ', 'QLD', 'TQQQ'])
+// Bitcoin itself (and wrapped BTC) plus US bitcoin ETFs: spot, futures and
+// leveraged. Grayscale's mini trust trades as "BTC", which lands here either way.
+const BITCOIN_FUNDS = new Set([
+  'BTC', 'WBTC', 'CBBTC',
+  'IBIT', 'FBTC', 'GBTC', 'BITB', 'ARKB', 'HODL', 'BTCO', 'BRRR', 'EZBC', 'BTCW', 'DEFI',
+  'BITO', 'BITX', 'BITU',
+])
 
 const SLICE_PALETTE = ['#22E38A', '#35A0FF', '#9B7CFF', '#FFB020', '#FF6FB5', '#5AD1C8', '#F5A524', '#7C5CFF', '#FF5470', '#4ADE80', '#38BDF8', '#C084FC']
 
@@ -323,12 +385,14 @@ function tickerSliceKey(symbol: string, groupIndex: boolean): string {
   if (groupIndex) {
     if (SP500_FUNDS.has(s)) return 'S&P 500'
     if (NASDAQ100_FUNDS.has(s)) return 'Nasdaq 100'
+    if (BITCOIN_FUNDS.has(s)) return 'Bitcoin'
   }
   return s
 }
 
 // Allocation slices for the donut: by asset class, or by ticker (optionally
-// rolling up S&P 500 / Nasdaq 100 index funds), capped to keep the chart readable.
+// rolling up S&P 500 / Nasdaq 100 funds and bitcoin + bitcoin ETFs), capped to
+// keep the chart readable.
 export function computeAllocationSlices(
   holdings: Holding[],
   mode: 'class' | 'ticker',
@@ -377,36 +441,54 @@ export interface ProjectionInput {
   ret: number // annual %
   years: number
   infl: number // annual %
+  // Contribution changes: from the start of year `year` (0 = now), contribute
+  // `monthly` instead. Later changes override earlier ones.
+  changes?: { year: number; monthly: number }[]
 }
 
 export interface ProjectionResult extends ProjectionInput {
   nominal: number[]
   real: number[]
   contributed: number[]
+  monthlyByYear: number[] // monthly contribution during each year (index 0 = year 1)
   finalNom: number
   finalReal: number
   totalContrib: number
   growth: number
 }
 
+// Monthly contribution in effect during year y (0-based).
+export function contributionForYear(p: Pick<ProjectionInput, 'monthly' | 'changes'>, y: number): number {
+  let m = p.monthly
+  for (const c of [...(p.changes ?? [])].sort((a, b) => a.year - b.year)) if (c.year <= y) m = c.monthly
+  return m
+}
+
+// Monthly compounding; each month grows at return ÷ 12, then the month's
+// contribution is added (an ordinary annuity).
 export function computeProjection(p: ProjectionInput): ProjectionResult {
   const r = p.ret / 100 / 12
-  const fv = (m: number) =>
-    r === 0 ? p.start + p.monthly * m : p.start * Math.pow(1 + r, m) + p.monthly * ((Math.pow(1 + r, m) - 1) / r)
-  const nominal: number[] = []
-  const real: number[] = []
-  const contributed: number[] = []
-  for (let y = 0; y <= p.years; y++) {
-    const m = y * 12
-    const val = fv(m)
-    nominal.push(val)
-    real.push(val / Math.pow(1 + p.infl / 100, y))
-    contributed.push(p.start + p.monthly * 12 * y)
+  const nominal: number[] = [p.start]
+  const real: number[] = [p.start]
+  const contributed: number[] = [p.start]
+  const monthlyByYear: number[] = []
+  let bal = p.start
+  let paid = p.start
+  for (let y = 1; y <= p.years; y++) {
+    const c = contributionForYear(p, y - 1)
+    monthlyByYear.push(c)
+    // A whole year at once: start × (1+r)^12 + c × ((1+r)^12 − 1) / r.
+    const g = Math.pow(1 + r, 12)
+    bal = r === 0 ? bal + c * 12 : bal * g + c * ((g - 1) / r)
+    paid += c * 12
+    nominal.push(bal)
+    real.push(bal / Math.pow(1 + p.infl / 100, y))
+    contributed.push(paid)
   }
   const finalNom = nominal[p.years]
   const finalReal = real[p.years]
   const totalContrib = contributed[p.years]
-  return { ...p, nominal, real, contributed, finalNom, finalReal, totalContrib, growth: finalNom - totalContrib }
+  return { ...p, nominal, real, contributed, monthlyByYear, finalNom, finalReal, totalContrib, growth: finalNom - totalContrib }
 }
 
 // ─── Net-worth history ───────────────────────────────────────────────

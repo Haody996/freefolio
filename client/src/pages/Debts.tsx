@@ -8,7 +8,7 @@ import LiabilityModal from '../components/dashboard/LiabilityModal'
 import type { LiabilityPayload } from '../components/dashboard/LiabilityModal'
 import DebtPlanner from '../components/dashboard/DebtPlanner'
 import type { DebtStrategy } from '../lib/debts'
-import { fmtUSD, liabilityLabel, liabilityColor, totalDebt, pct } from '../lib/portfolio'
+import { fmtUSD, fmtCompact, liabilityLabel, liabilityColor, totalDebt, pct, isMargin, payoffDebts, marginCollateral, marginStatus, accountTreatment, MARGIN_MAINTENANCE } from '../lib/portfolio'
 import type { Holding, Liability } from '../lib/portfolio'
 import { panel, panelTitle, pageTitle, primaryBtn } from '../components/ui/styles'
 
@@ -86,7 +86,10 @@ export default function Debts() {
   const liabilities = liabilitiesQ.data?.liabilities ?? []
   const holdings = holdingsQ.data?.holdings ?? []
   const debt = totalDebt(liabilities)
-  const monthly = liabilities.reduce((s, l) => s + l.minPayment, 0)
+  const planned = payoffDebts(liabilities)
+  const hasMargin = planned.length < liabilities.length
+  const monthly = planned.reduce((s, l) => s + l.minPayment, 0)
+  const brokerages = [...new Set(holdings.filter((h) => accountTreatment(h.accountType) === 'TAXABLE' && h.institution.trim()).map((h) => h.institution.trim()))]
   const avgApr = debt ? liabilities.reduce((s, l) => s + l.balance * l.interestRatePct, 0) / debt : 0
 
   return (
@@ -105,7 +108,7 @@ export default function Debts() {
         <section style={{ ...panel, textAlign: 'center', padding: '40px 24px' }}>
           <div style={{ fontFamily: "'Space Grotesk'", fontSize: 18, fontWeight: 700 }}>No debts tracked</div>
           <div style={{ color: '#8A90A2', fontSize: 13.5, margin: '8px auto 18px', maxWidth: 440, lineHeight: 1.55 }}>
-            Add your mortgage, car loan, student loans or credit cards. They'll come off your net worth, and you'll get an avalanche vs. snowball payoff plan.
+            Add your mortgage, car loan, student loans, credit cards or margin loans. They'll come off your net worth, and you'll get an avalanche vs. snowball payoff plan.
           </div>
           <button onClick={() => setModal({ editing: null })} style={primaryBtn}>
             + Add your first debt
@@ -125,6 +128,8 @@ export default function Debts() {
               .map((l) => {
                 const secured = l.holdingId ? holdings.find((h) => h.id === l.holdingId) : undefined
                 const monthlyInterest = (l.balance * l.interestRatePct) / 100 / 12
+                const collateral = isMargin(l) ? marginCollateral(holdings, l.institution) : null
+                const status = collateral ? marginStatus(l.balance, collateral.value) : null
                 return (
                   <div
                     key={l.id}
@@ -144,8 +149,24 @@ export default function Debts() {
                             {' '}· secured by {secured.name || secured.symbol} (equity {fmtUSD(secured.quantity * secured.price - l.balance)}, {pct(secured.quantity * secured.price ? l.balance / (secured.quantity * secured.price) : 0)} LTV)
                           </>
                         )}
-                        {l.minPayment <= monthlyInterest && l.balance > 0 && <span style={{ color: '#FF5470' }}> · payment doesn't cover interest</span>}
+                        {l.minPayment <= monthlyInterest && l.balance > 0 && !isMargin(l) && <span style={{ color: '#FF5470' }}> · payment doesn't cover interest</span>}
+                        {isMargin(l) && l.minPayment <= monthlyInterest && l.balance > 0 && <span> · unpaid interest is added to the loan</span>}
                       </div>
+                      {collateral && (
+                        <div style={{ fontSize: 12, color: '#8A90A2', marginTop: 2 }}>
+                          {status ? (
+                            <>
+                              {pct(status.ltv)} of your {fmtCompact(collateral.value)} {collateral.atInstitution ? `${l.institution.trim()} account` : 'taxable stocks & bonds'} is borrowed ·{' '}
+                              <span style={{ color: status.callDropPct < 0.15 ? '#FF5470' : status.callDropPct < 0.3 ? '#F5A524' : '#22E38A', fontWeight: 600 }}>
+                                {status.callDropPct > 0 ? `margin call if it falls ${pct(status.callDropPct)}` : 'below maintenance — margin call likely'}
+                              </span>{' '}
+                              <span title={`Assumes your broker requires ${pct(MARGIN_MAINTENANCE)} equity; many require 25–40%.`}>({pct(MARGIN_MAINTENANCE)} maintenance)</span>
+                            </>
+                          ) : (
+                            'Add the taxable stocks or ETFs this loan borrows against to see your margin-call buffer.'
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 15, color: '#FF5470', whiteSpace: 'nowrap' }}>{fmtUSD(l.balance)}</div>
                   </div>
@@ -153,8 +174,8 @@ export default function Debts() {
               })}
           </section>
 
-          <DebtPlanner
-            debts={liabilities.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))}
+          {planned.length > 0 && <DebtPlanner
+            debts={planned.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))}
             strategy={strategy}
             extra={extra}
             onStrategy={(s) => {
@@ -168,9 +189,10 @@ export default function Debts() {
             footer={
               <>
                 Your <Link to="/retirement">retirement plan</Link> uses this strategy and extra payment: debt payments that end before you retire can flow into savings, and any still due afterwards are added to retirement spending.
+                {hasMargin && ' Margin loans aren’t in this plan — they have no required payment, so the retirement plan subtracts them from your investments instead.'}
               </>
             }
-          />
+          />}
         </>
       )}
 
@@ -178,6 +200,7 @@ export default function Debts() {
         <LiabilityModal
           editing={modal.editing}
           securable={holdings.filter((h) => h.category === 'REAL_ESTATE' || h.category === 'VEHICLE')}
+          brokerages={brokerages}
           saving={save.isPending}
           error={save.isError ? 'Could not save — try again.' : undefined}
           onClose={() => setModal(null)}

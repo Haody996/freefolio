@@ -186,3 +186,39 @@ describe('runDebtScenario', () => {
     expect(r.scenario.months!).toBeLessThan(r.current.months!)
   })
 })
+
+describe('margin loans', () => {
+  const margin = debt({ name: 'Fidelity margin', type: 'MARGIN', institution: 'Fidelity', balance: 50000, interestRatePct: 8, minPayment: 0 })
+  const withMargin: PlanData = { ...data, liabilities: [...data.liabilities, margin] }
+
+  it('start the plan from investments net of the loan, taken from the taxable bucket', () => {
+    const base = basePlanInput(data)
+    const input = basePlanInput(withMargin)
+    expect(input.startingCapital).toBe(550000)
+    // Same pre-tax and Roth dollars, now a bigger share of a smaller pot.
+    expect(input.preTaxPct * input.startingCapital).toBeCloseTo(base.preTaxPct * base.startingCapital, 6)
+    expect(input.rothPct * input.startingCapital).toBeCloseTo(base.rothPct * base.startingCapital, 6)
+  })
+
+  it('stay out of the payoff schedule', () => {
+    const input = basePlanInput(withMargin)
+    const base = basePlanInput(data)
+    expect(input.debtPayments).toEqual(base.debtPayments)
+    expect(input.debtAnnualBudget).toBe(base.debtAnnualBudget)
+  })
+
+  it('paying margin off from the account changes nothing — it is already netted', () => {
+    const r = applyOverrides(withMargin, { payOffDebts: ['Fidelity margin'] })
+    expect(r.input.startingCapital).toBe(550000)
+    expect(r.changes.join(' ')).toMatch(/already subtracted/)
+    expect(r.warnings).toEqual([])
+  })
+
+  it('are left out of debt payoff what-ifs, with a note when named', () => {
+    const r = runDebtScenario(withMargin, { payOffDebts: ['Fidelity margin'] })
+    const plain = runDebtScenario(data, {})
+    expect(r.current.months).toBe(plain.current.months)
+    expect(r.scenario.lumpSum).toBe(0)
+    expect(r.warnings[0]).toMatch(/margin loan/)
+  })
+})

@@ -9,7 +9,7 @@ import YearBars from '../components/dashboard/YearBars'
 import EditableNumber from '../components/dashboard/EditableNumber'
 import NumberInput from '../components/dashboard/NumberInput'
 import { Link } from 'react-router-dom'
-import { investableTotal, bucketSplit, fmtUSD, fmtCompact, pct, totalDebt } from '../lib/portfolio'
+import { planStart, fmtUSD, fmtCompact, pct, totalDebt } from '../lib/portfolio'
 import type { Holding, Liability } from '../lib/portfolio'
 import { simulateRetirement, backtestRetirement, ssClaimFactor, debtScheduleFromSettings } from '../lib/retirement'
 import { monthsLabel, payoffDate } from '../lib/debts'
@@ -196,14 +196,17 @@ export default function Retirement() {
     queryFn: async () => (await api.get('/liabilities')).data,
   })
 
-  // Starting capital defaults to investable assets (real estate & vehicles excluded).
-  const netWorth = investableTotal(holdingsQ.data?.holdings ?? [])
+  // Starting capital defaults to investable assets (real estate & vehicles
+  // excluded), net of margin loans.
+  const start = planStart(holdingsQ.data?.holdings ?? [], liabilitiesQ.data?.liabilities ?? [])
+  const netWorth = start.capital
   const [redirectDebt, setRedirectDebt] = useState<boolean | null>(null)
 
   // Seed the plan once from saved settings; startingCapital falls back to net worth.
   const settings = settingsQ.data?.settings
+  const sourcesLoaded = !holdingsQ.isLoading && !liabilitiesQ.isLoading
   useEffect(() => {
-    if (settings && !plan) {
+    if (settings && !plan && sourcesLoaded) {
       const s = settings
       const seeded = {} as Plan
       for (const f of NUM_FIELDS) (seeded as Record<string, unknown>)[f] = Number(s[f] ?? 0)
@@ -213,7 +216,7 @@ export default function Retirement() {
       seeded.applyRmd = s.applyRmd !== false
       setPlan(seeded)
     }
-  }, [settings, plan, netWorth])
+  }, [settings, plan, netWorth, sourcesLoaded])
 
   // Persist plan changes (debounced).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -253,7 +256,7 @@ export default function Retirement() {
 
   // Withdrawal buckets are derived from the user's holdings (pre-tax / Roth / taxable).
   const holdings = holdingsQ.data?.holdings ?? []
-  const { preTaxPct, rothPct } = bucketSplit(holdings)
+  const { preTaxPct, rothPct } = start
   const taxablePct = Math.max(0, 1 - preTaxPct - rothPct)
   const liabilities = liabilitiesQ.data?.liabilities ?? []
   const schedule = debtScheduleFromSettings(liabilities, { ...settings, ...(redirectDebt != null ? { redirectDebtPayments: redirectDebt } : {}) })
@@ -261,7 +264,7 @@ export default function Retirement() {
   // The plan as currently edited, for the levers and saved scenarios.
   const planSettings = { ...settings, ...plan, redirectDebtPayments: schedule.redirectDebtPayments }
   const planData: PlanData = { settings: planSettings, holdings, liabilities }
-  const planKey = JSON.stringify([plan, settings?.debtStrategy, settings?.debtExtraPayment, schedule.redirectDebtPayments, investableTotal(holdings), preTaxPct, rothPct, liabilities.map((l) => [l.id, l.balance, l.interestRatePct, l.minPayment])])
+  const planKey = JSON.stringify([plan, settings?.debtStrategy, settings?.debtExtraPayment, schedule.redirectDebtPayments, netWorth, preTaxPct, rothPct, liabilities.map((l) => [l.id, l.balance, l.interestRatePct, l.minPayment])])
 
   const result = simulateRetirement(simInput)
   const yearsToRetire = Math.max(0, plan.retirementAge - plan.currentAge)
@@ -333,6 +336,19 @@ export default function Retirement() {
             <div style={groupTitle}>Savings &amp; growth</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Current investments" value={plan.startingCapital} onChange={(n) => update('startingCapital', n)} prefix="$" step={1000} span />
+              {start.margin > 0 && (
+                <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#8A90A2', marginTop: -4, lineHeight: 1.5 }}>
+                  Your investments are worth {fmtUSD(start.capital)} after your {fmtUSD(start.margin)} margin loan.
+                  {Math.abs(plan.startingCapital - start.capital) > 1 && (
+                    <>
+                      {' '}
+                      <button type="button" onClick={() => update('startingCapital', Math.round(start.capital))} style={{ border: 'none', background: 'none', padding: 0, color: '#22E38A', fontWeight: 600, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}>
+                        Use {fmtUSD(start.capital)}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <Field label="Monthly contribution" value={plan.monthlyContribution} onChange={(n) => update('monthlyContribution', n)} prefix="$" step={100} span />
               <Field label="Expected return" value={plan.expectedReturnPct} onChange={(n) => update('expectedReturnPct', n)} suffix="%" step={0.1} />
               <Field label="Inflation" value={plan.inflationPct} onChange={(n) => update('inflationPct', n)} suffix="%" step={0.1} />

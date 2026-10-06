@@ -7,7 +7,7 @@ import { runScenario, runDebtScenario, computeLevers, summarize, basePlanInput, 
 import type { PlanData, ScenarioOverrides, ScenarioResult, LeversResult } from './scenarios'
 import { simulatePayoff, payoffDate } from './debts'
 import type { DebtStrategy } from './debts'
-import { computeTotals, computeTaxBreakdown, investableTotal, totalDebt, accountLabel, CAT_LABEL } from './portfolio'
+import { computeTotals, computeTaxBreakdown, investableTotal, totalDebt, marginDebt, payoffDebts, accountLabel, CAT_LABEL } from './portfolio'
 import type { Category } from './portfolio'
 
 export type ToolCard =
@@ -56,7 +56,9 @@ export async function runTool(name: string, args: Record<string, unknown>, data:
       }
     }
     case 'run_debt_payoff': {
-      if (!data.liabilities.length) return { response: { error: 'The user has no debts entered. They can add them on the Debts page.' } }
+      if (!payoffDebts(data.liabilities).length) {
+        return { response: { error: data.liabilities.length ? 'The user only has margin loans, which have no required payment and are not part of payoff plans.' : 'The user has no debts entered. They can add them on the Debts page.' } }
+      }
       const label = String(args.label || 'Debt plan').slice(0, 80)
       const strategy = args.strategy === 'SNOWBALL' || args.strategy === 'AVALANCHE' ? (args.strategy as DebtStrategy) : undefined
       const extraMonthly = typeof args.extraMonthly === 'number' ? args.extraMonthly : undefined
@@ -144,12 +146,12 @@ export function buildAssistantContext(data: PlanData, gainsByHolding: Map<string
   const s = data.settings
   const current = summarize(basePlanInput(data))
   const debtPlan = simulatePayoff(
-    data.liabilities.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment })),
+    payoffDebts(data.liabilities).map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment })),
     s.debtStrategy === 'SNOWBALL' ? 'SNOWBALL' : 'AVALANCHE',
     Number(s.debtExtraPayment) || 0
   )
   return {
-    netWorth: { total: Math.round(totals.total - debt), assets: Math.round(totals.total), debts: Math.round(debt), investable: Math.round(investableTotal(data.holdings)) },
+    netWorth: { total: Math.round(totals.total - debt), assets: Math.round(totals.total), debts: Math.round(debt), investable: Math.round(investableTotal(data.holdings)), marginLoans: Math.round(marginDebt(data.liabilities)) || undefined },
     investableByTaxTreatment: Object.fromEntries(tax.map((t) => [t.label, Math.round(t.value)])),
     assetsByClass: byCategory,
     topHoldings: totals.en.slice(0, 12).map((h) => ({
@@ -181,6 +183,6 @@ export function buildAssistantContext(data: PlanData, gainsByHolding: Map<string
       extraDebtPaymentPerMonth: s.debtExtraPayment,
     },
     currentPlanResult: summaryForAi(current),
-    debtPlan: data.liabilities.length ? { debtFreeDate: payoffDate(debtPlan.months), totalInterest: Math.round(debtPlan.totalInterest) } : null,
+    debtPlan: payoffDebts(data.liabilities).length ? { debtFreeDate: payoffDate(debtPlan.months), totalInterest: Math.round(debtPlan.totalInterest) } : null,
   }
 }

@@ -7,6 +7,7 @@
 
 import { simulatePayoff, annualPayments } from './debts'
 import type { DebtStrategy } from './debts'
+import { payoffDebts } from './portfolio'
 import type { Liability } from './portfolio'
 
 export type WithdrawalStrategy = 'FIXED' | 'GUARDRAILS'
@@ -57,11 +58,12 @@ export interface DebtSchedule {
   debtFreeMonths: number | null
 }
 
-// The payoff plan (strategy + extra payment from saved settings) as yearly payments.
+// The payoff plan (strategy + extra payment from saved settings) as yearly
+// payments. Margin loans aren't in it — plans net them against investments.
 export function debtScheduleFromSettings(liabilities: Liability[], s: Record<string, unknown> | undefined): DebtSchedule {
   const strategy: DebtStrategy = s?.debtStrategy === 'SNOWBALL' ? 'SNOWBALL' : 'AVALANCHE'
   const extra = Number(s?.debtExtraPayment) || 0
-  const debts = liabilities.map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))
+  const debts = payoffDebts(liabilities).map((l) => ({ id: l.id, name: l.name, balance: l.balance, ratePct: l.interestRatePct, minPayment: l.minPayment }))
   const plan = simulatePayoff(debts, strategy, extra)
   const budget = debts.filter((d) => d.balance > 0).reduce((t, d) => t + d.minPayment, 0) + (debts.some((d) => d.balance > 0) ? extra : 0)
   return {

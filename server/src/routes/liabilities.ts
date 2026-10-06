@@ -7,7 +7,7 @@ import { LiabilityType } from '@prisma/client'
 const router = Router()
 router.use(authMiddleware)
 
-const TYPES: LiabilityType[] = ['MORTGAGE', 'HELOC', 'AUTO_LOAN', 'STUDENT_LOAN', 'CREDIT_CARD', 'PERSONAL_LOAN', 'MEDICAL', 'OTHER']
+const TYPES: LiabilityType[] = ['MORTGAGE', 'HELOC', 'AUTO_LOAN', 'STUDENT_LOAN', 'CREDIT_CARD', 'PERSONAL_LOAN', 'MEDICAL', 'MARGIN', 'OTHER']
 
 function num(v: unknown, fallback: number): number {
   const n = Number(v)

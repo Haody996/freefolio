@@ -101,6 +101,7 @@ enum LiabilityType {
   CREDIT_CARD
   PERSONAL_LOAN
   MEDICAL
+  MARGIN // borrowed against a taxable brokerage account; no required payment
   OTHER
 }
 

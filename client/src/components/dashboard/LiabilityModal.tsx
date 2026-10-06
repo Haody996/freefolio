@@ -23,12 +23,14 @@ const PLACEHOLDER: Record<LiabilityType, string> = {
   CREDIT_CARD: 'e.g. Chase Sapphire',
   PERSONAL_LOAN: 'e.g. SoFi personal loan',
   MEDICAL: 'e.g. Hospital bill',
+  MARGIN: 'e.g. Fidelity margin',
   OTHER: 'e.g. Family loan',
 }
 
 export default function LiabilityModal({
   editing,
   securable,
+  brokerages = [],
   saving,
   error,
   onClose,
@@ -37,6 +39,7 @@ export default function LiabilityModal({
 }: {
   editing: Liability | null
   securable: Holding[] // real estate & vehicles a debt can be secured by
+  brokerages?: string[] // institutions of taxable holdings (margin suggestions)
   saving?: boolean
   error?: string
   onClose: () => void
@@ -56,6 +59,10 @@ export default function LiabilityModal({
   const pay = parseFloat(payment) || 0
   const preview = bal > 0 && pay > 0 ? simulatePayoff([{ id: 'x', name, balance: bal, ratePct: apr, minPayment: pay }], 'AVALANCHE') : null
   const monthlyInterest = (bal * apr) / 100 / 12
+  const margin = type === 'MARGIN'
+  // Margin with payments below the interest: what the loan grows to in a year.
+  const r = apr / 100 / 12
+  const inAYear = r > 0 ? bal * Math.pow(1 + r, 12) - (pay * (Math.pow(1 + r, 12) - 1)) / r : bal - pay * 12
 
   function save() {
     onSave({
@@ -65,7 +72,7 @@ export default function LiabilityModal({
       balance: bal,
       interestRatePct: apr,
       minPayment: pay,
-      holdingId: holdingId || null,
+      holdingId: margin ? null : holdingId || null,
     })
   }
 
@@ -103,8 +110,15 @@ export default function LiabilityModal({
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder={PLACEHOLDER[type]} style={inputStyle} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={labelStyle}>Lender</label>
-              <input value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="optional" style={inputStyle} />
+              <label style={labelStyle}>{margin ? 'Brokerage' : 'Lender'}</label>
+              <input value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder={margin ? 'e.g. Fidelity' : 'optional'} list={margin ? 'margin-brokerages' : undefined} style={inputStyle} />
+              {margin && (
+                <datalist id="margin-brokerages">
+                  {brokerages.map((b) => (
+                    <option key={b} value={b} />
+                  ))}
+                </datalist>
+              )}
             </div>
           </div>
 
@@ -120,14 +134,19 @@ export default function LiabilityModal({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={labelStyle}>Monthly payment</label>
-              <MoneyInput value={payment} onChange={setPayment} prefix="$" placeholder="minimum" ariaLabel="Monthly payment" />
+              <MoneyInput value={payment} onChange={setPayment} prefix="$" placeholder={margin ? 'optional' : 'minimum'} ariaLabel="Monthly payment" />
             </div>
           </div>
+          {margin && (
+            <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -6, lineHeight: 1.5 }}>
+              Borrowed against your brokerage account. Margin has no required payment, so it stays out of the payoff plan — your retirement plan subtracts it from your investments instead. Name the brokerage to see how close you are to a margin call.
+            </div>
+          )}
           {(type === 'MORTGAGE' || type === 'HELOC') && (
             <div style={{ fontSize: 12, color: '#8A90A2', marginTop: -6 }}>Use principal + interest only — leave out escrow for taxes and insurance.</div>
           )}
 
-          {securable.length > 0 && (
+          {securable.length > 0 && !margin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={labelStyle}>Secured by</label>
               <select value={holdingId} onChange={(e) => setHoldingId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
@@ -143,7 +162,12 @@ export default function LiabilityModal({
 
           {bal > 0 && (
             <div style={{ fontSize: 12.5, color: '#C9CDD8', background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '10px 12px', lineHeight: 1.5 }}>
-              {pay <= monthlyInterest ? (
+              {margin && pay <= monthlyInterest ? (
+                <span style={{ color: '#F5A524' }}>
+                  {fmtUSD(monthlyInterest)}/mo of interest {pay > 0 ? 'is more than you pay, so the rest is' : 'is'} added to the loan — it grows to{' '}
+                  <b>{fmtUSD(inAYear)}</b> in a year.
+                </span>
+              ) : pay <= monthlyInterest ? (
                 <span style={{ color: '#FF5470' }}>
                   This payment doesn't cover the {fmtUSD(monthlyInterest)}/mo in interest — the balance will never go down.
                 </span>

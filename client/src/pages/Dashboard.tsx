@@ -79,7 +79,7 @@ export default function Dashboard() {
   const [txHolding, setTxHolding] = useState<Holding | null>(null)
   const [debtModal, setDebtModal] = useState<{ editing: Liability | null } | null>(null)
 
-  // Allocation donut: by asset class or by ticker (+ optional index-fund grouping).
+  // Allocation donut: by asset class or by ticker (+ optional grouping of index funds and bitcoin ETFs).
   const [allocMode, setAllocMode] = useState<'class' | 'ticker'>(() => (localStorage.getItem('ff_alloc_mode') === 'class' ? 'class' : 'ticker'))
   const [groupIdx, setGroupIdx] = useState(() => localStorage.getItem('ff_alloc_group') !== '0')
   function chooseAllocMode(m: 'class' | 'ticker') {
@@ -380,7 +380,7 @@ export default function Dashboard() {
           {allocMode === 'ticker' && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: '#8A90A2', cursor: 'pointer' }}>
               <input type="checkbox" checked={groupIdx} onChange={toggleGroupIdx} style={{ accentColor: '#22E38A', width: 14, height: 14 }} />
-              Group index funds (S&amp;P 500, Nasdaq 100)
+              Group funds that track the same thing (S&amp;P 500, Nasdaq 100, Bitcoin)
             </label>
           )}
         </div>

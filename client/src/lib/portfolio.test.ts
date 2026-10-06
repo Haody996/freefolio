@@ -12,6 +12,10 @@ import {
   investableTotal,
   isEstimatedAsset,
   totalDebt,
+  planStart,
+  marginCollateral,
+  marginStatus,
+  payoffDebts,
 } from './portfolio'
 import type { Holding, Liability } from './portfolio'
 
@@ -113,6 +117,20 @@ describe('computeAllocationSlices', () => {
     expect(capped[2].key).toBe('Other')
     expect(capped.reduce((s, x) => s + x.pct, 0)).toBeCloseTo(1, 12)
   })
+
+  it('groups bitcoin with bitcoin ETFs, but only when grouping is on', () => {
+    const hs = [
+      holding({ symbol: 'BTC', category: 'CRYPTO', quantity: 0.5, price: 100000 }),
+      holding({ symbol: 'ibit', quantity: 100, price: 60 }),
+      holding({ symbol: 'FBTC', quantity: 50, price: 90 }),
+      holding({ symbol: 'ETH', category: 'CRYPTO', quantity: 2, price: 4000 }),
+      holding({ symbol: 'MSTR', quantity: 10, price: 300 }),
+    ]
+    const grouped = computeAllocationSlices(hs, 'ticker', true)
+    expect(grouped.map((s) => s.key)).toEqual(['Bitcoin', 'ETH', 'MSTR'])
+    expect(grouped[0].value).toBe(50000 + 6000 + 4500)
+    expect(computeAllocationSlices(hs, 'ticker', false).map((s) => s.key)).toEqual(['BTC', 'ETH', 'IBIT', 'FBTC', 'MSTR'])
+  })
 })
 
 describe('computeProjection', () => {
@@ -128,9 +146,72 @@ describe('computeProjection', () => {
     expect(p.real[30]).toBeCloseTo(p.finalNom / Math.pow(1.03, 30), 6)
   })
 
+  it('matches the closed-form future value without changes', () => {
+    const p = computeProjection({ start: 10000, monthly: 500, ret: 7, years: 30, infl: 3 })
+    const r = 0.07 / 12
+    const g = Math.pow(1 + r, 360)
+    expect(p.finalNom).toBeCloseTo(10000 * g + 500 * ((g - 1) / r), 6)
+    expect(p.monthlyByYear.every((m) => m === 500)).toBe(true)
+  })
+
+  it('switches contributions at the start of the given year', () => {
+    // Age 30: $500/mo until 50 (20 years), then $0 for the last 10.
+    const p = computeProjection({ start: 0, monthly: 500, ret: 6, years: 30, infl: 0, changes: [{ year: 20, monthly: 0 }] })
+    const r = 0.005
+    const at20 = 500 * ((Math.pow(1 + r, 240) - 1) / r)
+    expect(p.nominal[20]).toBeCloseTo(at20, 6)
+    expect(p.finalNom).toBeCloseTo(at20 * Math.pow(1 + r, 120), 6)
+    expect(p.totalContrib).toBe(500 * 240)
+    expect(p.monthlyByYear[19]).toBe(500)
+    expect(p.monthlyByYear[20]).toBe(0)
+  })
+
+  it('applies several changes in age order, whatever order they were entered', () => {
+    const p = computeProjection({ start: 0, monthly: 100, ret: 0, years: 10, infl: 0, changes: [{ year: 6, monthly: 0 }, { year: 3, monthly: 300 }] })
+    expect(p.monthlyByYear).toEqual([100, 100, 100, 300, 300, 300, 0, 0, 0, 0])
+    expect(p.totalContrib).toBe(100 * 36 + 300 * 36)
+  })
+
   it('matches the calculator page example (year 15)', () => {
     const p = computeProjection({ start: 10000, monthly: 500, ret: 7, years: 30, infl: 3 })
     expect(Math.round(p.nominal[15])).toBe(186971)
     expect(p.contributed[15]).toBe(100000)
+  })
+})
+
+describe('margin loans', () => {
+  const liability = (p: Partial<Liability>): Liability => ({ id: 'l', name: 'Debt', type: 'OTHER', institution: '', balance: 0, interestRatePct: 0, minPayment: 0, holdingId: null, ...p })
+  const hs = [
+    holding({ symbol: 'VTI', institution: 'Fidelity', quantity: 100, price: 1000 }), // 100k taxable at Fidelity
+    holding({ symbol: 'BND', category: 'BONDS', institution: 'fidelity ', quantity: 10, price: 1000 }), // 10k
+    holding({ symbol: 'VOO', institution: 'Schwab', quantity: 50, price: 1000 }), // 50k taxable at Schwab
+    holding({ symbol: 'BTC', category: 'CRYPTO', institution: 'Fidelity', quantity: 1, price: 90000 }), // not marginable
+    holding({ symbol: 'FXAIX', accountType: 'ROTH_IRA', institution: 'Fidelity', quantity: 1, price: 40000 }), // retirement account
+  ]
+
+  it('borrow against taxable stocks and bonds at the named brokerage', () => {
+    expect(marginCollateral(hs, 'Fidelity')).toEqual({ value: 110000, atInstitution: true })
+    expect(marginCollateral(hs, '')).toEqual({ value: 160000, atInstitution: false })
+    expect(marginCollateral(hs, 'Vanguard')).toEqual({ value: 160000, atInstitution: false })
+  })
+
+  it('measure the buffer before a margin call', () => {
+    // $40k borrowed on $100k: call when value < 40k / 0.7 = 57,142.86 → a 42.86% drop.
+    const s = marginStatus(40000, 100000)!
+    expect(s.ltv).toBeCloseTo(0.4, 12)
+    expect(s.equityPct).toBeCloseTo(0.6, 12)
+    expect(s.callDropPct).toBeCloseTo(1 - 40000 / 70000, 12)
+    expect(marginStatus(80000, 100000)!.callDropPct).toBe(0) // already under 30% equity
+    expect(marginStatus(1000, 0)).toBeNull()
+  })
+
+  it('come off investable assets in plans, and out of payoff plans', () => {
+    const debts = [liability({ type: 'MARGIN', balance: 30000 }), liability({ type: 'CREDIT_CARD', balance: 5000 })]
+    const start = planStart(hs, debts)
+    expect(start.margin).toBe(30000)
+    expect(start.capital).toBe(investableTotal(hs) - 30000)
+    expect(start.rothPct * start.capital).toBeCloseTo(40000, 6)
+    expect(payoffDebts(debts).map((d) => d.type)).toEqual(['CREDIT_CARD'])
+    expect(planStart(hs, [liability({ type: 'MARGIN', balance: 1e9 })]).capital).toBe(0)
   })
 })
